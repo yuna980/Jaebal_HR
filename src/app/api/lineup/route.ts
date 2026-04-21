@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { APP_TO_KBO_TEAM_ID, fetchKboLineup } from '@/lib/kboScraper';
-import { checkRateLimit, isValidCompactDate, isValidTeamId } from '@/lib/apiSecurity';
+import { checkRateLimit, isValidTeamId, normalizeLineupDate } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +16,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const teamId = searchParams.get('teamId') || '';
   const dateParam = searchParams.get('date') || '';
+  const normalizedDate = normalizeLineupDate(dateParam);
 
   if (!isValidTeamId(teamId, Object.keys(APP_TO_KBO_TEAM_ID))) {
     return NextResponse.json(
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!isValidCompactDate(dateParam)) {
+  if (!normalizedDate) {
     return NextResponse.json(
       { success: false, message: '잘못된 날짜 형식입니다.', startingPitcher: null, battingOrder: [], isLineupOut: false },
       { status: 400 }
@@ -32,10 +33,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const lineup = await fetchKboLineup(teamId, dateParam);
+    const lineup = await fetchKboLineup(teamId, normalizedDate);
 
     return NextResponse.json({
-      date: dateParam,
+      date: normalizedDate,
       teamId,
       ...lineup,
     });

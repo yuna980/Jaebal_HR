@@ -76,3 +76,14 @@ export function isValidIsoDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+export function normalizeLineupDate(value: string) {
+  if (isValidCompactDate(value)) {
+    return value;
+  }
+
+  if (isValidIsoDate(value)) {
+    return value.replaceAll('-', '');
+  }
+
+  return null;
+}
