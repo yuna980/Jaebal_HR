@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useSyncExternalStore } from 'react';
 import { Team, KBO_TEAMS } from '@/data/teams';
 
 interface TeamContextType {
@@ -12,29 +12,40 @@ interface TeamContextType {
 
 const TeamContext = createContext<TeamContextType | undefined>(undefined);
 
-export function TeamProvider({ children }: { children: React.ReactNode }) {
-  const [myTeam, setMyTeam] = useState<Team | null>(null);
-  const [isGoingToday, setIsGoingToday] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
+const TEAM_STORAGE_KEY = 'myTeamId';
+const TEAM_CHANGE_EVENT = 'my-team-change';
 
-  useEffect(() => {
-    const savedTeamId = localStorage.getItem('myTeamId');
-    if (savedTeamId) {
-      const team = KBO_TEAMS.find((t) => t.id === savedTeamId);
-      if (team) setMyTeam(team);
-    }
-    setIsInitialized(true);
-  }, []);
+function subscribeToSelectedTeam(callback: () => void) {
+  const handleChange = () => callback();
+  window.addEventListener('storage', handleChange);
+  window.addEventListener(TEAM_CHANGE_EVENT, handleChange);
+
+  return () => {
+    window.removeEventListener('storage', handleChange);
+    window.removeEventListener(TEAM_CHANGE_EVENT, handleChange);
+  };
+}
+
+function getSelectedTeamId() {
+  return localStorage.getItem(TEAM_STORAGE_KEY);
+}
+
+export function TeamProvider({ children }: { children: React.ReactNode }) {
+  const selectedTeamId = useSyncExternalStore(
+    subscribeToSelectedTeam,
+    getSelectedTeamId,
+    () => null
+  );
+  const [isGoingToday, setIsGoingToday] = useState(false);
+  const myTeam = KBO_TEAMS.find((team) => team.id === selectedTeamId) ?? null;
 
   const selectTeam = (teamId: string) => {
     const team = KBO_TEAMS.find((t) => t.id === teamId);
     if (team) {
-      setMyTeam(team);
-      localStorage.setItem('myTeamId', teamId);
+      localStorage.setItem(TEAM_STORAGE_KEY, teamId);
+      window.dispatchEvent(new Event(TEAM_CHANGE_EVENT));
     }
   };
-
-  if (!isInitialized) return null;
 
   return (
     <TeamContext.Provider value={{ myTeam, selectTeam, isGoingToday, setIsGoingToday }}>

@@ -1,26 +1,25 @@
 'use client';
 
+import Image from 'next/image';
+import Link from 'next/link';
 import { useTeam } from '@/context/TeamContext';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Ticket, History, TrendingUp, ShoppingBag, ExternalLink, Star, X } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Ticket, History, TrendingUp, ShoppingBag, ExternalLink, Star } from 'lucide-react';
 import { useState } from 'react';
 import { useKboSchedule } from '@/hooks/useKboSchedule';
 import { TEAM_NAME_TO_ID } from '@/lib/kboScraper';
+import TeamLogo from '@/components/TeamLogo';
+import DiaryModal from '@/components/DiaryModal';
+import { findRecordForDate, formatDiaryDate, useFanDiaryRecords } from '@/lib/fanDiary';
 
 export default function ProfilePage() {
   const { myTeam } = useTeam();
   const { schedules } = useKboSchedule();
-  
-  const [history, setHistory] = useState([
-    { date: '2026.04.12', venue: '수원', type: '중계', result: 'L', review: '역전패 실화냐...', rating: 2 },
-    { date: '2026.04.10', venue: '잠실', type: '직관', result: 'W', review: '이닝 끝날 때 치킨 먹음 꿀맛!', rating: 5 },
-  ]);
+  const records = useFanDiaryRecords();
+  const currentYear = new Date().getFullYear();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDiaryDate, setSelectedDiaryDate] = useState('');
-  const [reviewText, setReviewText] = useState('');
-  const [rating, setRating] = useState(0);
-  const [goingType, setGoingType] = useState<'직관' | '중계'>('중계');
 
   const ticketingSites = [
     { name: '인터파크 티켓', url: 'https://ticket.interpark.com' },
@@ -29,25 +28,71 @@ export default function ProfilePage() {
 
   if (!myTeam) return null;
 
+  const quickLinks = [
+    {
+      name: `${myTeam.name} 공식 온라인 샵`,
+      description: '유니폼, 모자, 응원용품 보러가기',
+      url: 'https://landers.family.ssg.com/',
+      background: '#FFFFFF',
+      textColor: 'var(--text)',
+      borderColor: `${myTeam.color}33`,
+      iconColor: myTeam.color,
+      featured: true,
+      badgeText: myTeam.name,
+      accentColor: myTeam.color,
+      logoSurface: myTeam.color,
+      descriptionColor: 'var(--text-light)',
+    },
+    {
+      name: '네이버 스포츠 바로가기',
+      description: '빠르게 경기 일정과 기록 확인',
+      url: 'https://m.sports.naver.com/index',
+      background: '#FFFFFF',
+      textColor: 'var(--text)',
+      borderColor: '#BBF7D0',
+      iconColor: '#16A34A',
+      featured: false,
+      logoPath: '/brand-logos/naver-sports.svg',
+      logoAlt: '네이버 스포츠 로고',
+      accentColor: '#16A34A',
+      logoSurface: '#F6FFF8',
+      descriptionColor: 'var(--text-light)',
+    },
+    {
+      name: '티빙으로 중계보기',
+      description: '실시간 중계 화면으로 바로 이동',
+      url: 'https://www.tving.com/sports/kbo',
+      background: '#FFFFFF',
+      textColor: 'var(--text)',
+      borderColor: '#FECACA',
+      iconColor: '#E11D48',
+      featured: false,
+      logoPath: '/brand-logos/tving.jpg',
+      logoAlt: '티빙 로고',
+      accentColor: '#E11D48',
+      logoSurface: '#FFF5F5',
+      descriptionColor: 'var(--text-light)',
+    },
+  ];
+
   // 종료된 내 팀 경기 찾기
   const finishedGames = schedules.filter(
     (m) =>
       m.status === 'finished' &&
       (TEAM_NAME_TO_ID[m.homeTeam] === myTeam.id || TEAM_NAME_TO_ID[m.awayTeam] === myTeam.id)
   );
+  const history = records
+    .filter((record) => record.teamId === myTeam.id && record.review.trim())
+    .sort((left, right) => right.date.localeCompare(left.date));
 
   const handleDateChange = (dateStr: string) => {
     setSelectedDiaryDate(dateStr);
-    const existingRecord = history.find(h => h.date === `2026.${dateStr}`);
-    if (existingRecord) {
-      setReviewText(existingRecord.review);
-      setRating(existingRecord.rating);
-      setGoingType(existingRecord.type === '직관' ? '직관' : '중계');
-    } else {
-      setReviewText('');
-      setRating(0);
-      setGoingType('중계');
-    }
+  };
+
+  const openEditModal = (dateText: string) => {
+    const normalizedDate = dateText.split('.').slice(-2).join('.');
+    handleDateChange(normalizedDate);
+    setIsModalOpen(true);
   };
 
   const openModal = () => {
@@ -58,42 +103,12 @@ export default function ProfilePage() {
   };
 
   const selectedGame = finishedGames.find(g => g.date === selectedDiaryDate);
-
-  const handleSaveReview = () => {
-    if (!selectedGame) return;
-    
-    const isMyHome = TEAM_NAME_TO_ID[selectedGame.homeTeam] === myTeam.id;
-    const myScore = isMyHome ? selectedGame.homeScore! : selectedGame.awayScore!;
-    const oppScore = isMyHome ? selectedGame.awayScore! : selectedGame.homeScore!;
-    const result = myScore > oppScore ? 'W' : myScore < oppScore ? 'L' : 'D';
-
-    const dateFull = `2026.${selectedDiaryDate}`;
-    const newRecord = {
-      date: dateFull,
-      venue: selectedGame.stadium,
-      type: goingType,
-      result,
-      review: reviewText,
-      rating
-    };
-
-    const existingIndex = history.findIndex(h => h.date === dateFull);
-    if (existingIndex >= 0) {
-      const newHistory = [...history];
-      newHistory[existingIndex] = newRecord;
-      setHistory(newHistory);
-    } else {
-      // 날짜순 내림차순 정렬
-      setHistory([newRecord, ...history].sort((a,b) => b.date.localeCompare(a.date)));
-    }
-    setIsModalOpen(false);
-  };
+  const selectedRecord = findRecordForDate(records, myTeam.id, formatDiaryDate(currentYear, selectedDiaryDate));
 
   return (
     <div className="container" style={{ position: 'relative' }}>
       <header style={{ textAlign: 'center', marginBottom: '32px' }}>
         <div style={{ 
-          fontSize: '48px', 
           background: myTeam.bgSecondary, 
           width: '100px', 
           height: '100px', 
@@ -103,10 +118,23 @@ export default function ProfilePage() {
           justifyContent: 'center', 
           margin: '0 auto 16px' 
         }}>
-          {myTeam.logo}
+          <TeamLogo team={myTeam} size={64} rounded />
         </div>
         <h2 style={{ fontSize: '24px' }}>{myTeam.fullName} 야덕</h2>
         <p style={{ color: 'var(--text-light)', fontSize: '14px' }}>오늘도 야구볼래? 👋</p>
+        <div style={{ marginTop: '10px' }}>
+          <Link
+            href="/teams"
+            style={{
+              fontSize: '13px',
+              color: 'var(--text-light)',
+              textDecoration: 'underline',
+              textUnderlineOffset: '3px',
+            }}
+          >
+            응원팀 변경하기
+          </Link>
+        </div>
       </header>
 
       {/* Team Stats */}
@@ -161,7 +189,13 @@ export default function ProfilePage() {
             <motion.div 
               key={i} 
               className="card" 
-              style={{ margin: 0, padding: '16px', borderLeft: `6px solid ${record.result === 'W' ? 'var(--success)' : record.result === 'L' ? 'var(--error)' : 'var(--border)'}` }}
+              onClick={() => openEditModal(record.date)}
+              style={{
+                margin: 0,
+                padding: '16px',
+                borderLeft: `6px solid ${record.result === 'W' ? 'var(--success)' : record.result === 'L' ? 'var(--error)' : 'var(--border)'}`,
+                cursor: 'pointer',
+              }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-light)' }}>{record.date} @{record.venue}</span>
@@ -172,7 +206,7 @@ export default function ProfilePage() {
                   background: 'var(--background)',
                   fontWeight: 'bold'
                 }}>
-                  {record.type} {record.result === 'W' ? '승리' : record.result === 'L' ? '패배' : record.result === '-' ? '진행중' : '무승부'}
+                  {record.isAttending ? '직관' : '중계'} {record.result === 'W' ? '승리' : record.result === 'L' ? '패배' : record.result === '-' ? '진행중' : '무승부'}
                 </span>
               </div>
               <p style={{ fontSize: '14px', marginBottom: '8px' }}>{record.review}</p>
@@ -186,197 +220,137 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Goods Shop */}
+      {/* Quick Links */}
       <div style={{ marginBottom: '24px' }}>
         <h3 style={{ fontSize: '18px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <ShoppingBag size={20} color="var(--primary)" /> 우리 팀 굿즈
+          <ShoppingBag size={20} color="var(--primary)" /> 바로가기
         </h3>
-        <a 
-          href="#" 
-          className="card" 
-          style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            margin: 0, 
-            background: myTeam.color, 
-            color: 'white',
-            borderColor: myTeam.color
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '24px' }}>📦</span>
-            <div>
-              <div style={{ fontWeight: 'bold' }}>{myTeam.name} 공식 온라인 샵</div>
-              <div style={{ fontSize: '12px', opacity: 0.8 }}>유니폼, 모자 보러가기</div>
-            </div>
-          </div>
-          <ExternalLink size={20} />
-        </a>
-      </div>
-
-      {/* Modal Popup Overlay */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(0,0,0,0.6)',
-              zIndex: 10000,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '20px'
-            }}
-            onClick={() => setIsModalOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {quickLinks.map((link) => (
+            <a
+              key={link.name}
+              href={link.url}
+              target="_blank"
+              rel="noreferrer"
+              className="card"
               style={{
-                background: 'var(--card)',
-                width: '100%',
-                maxWidth: '400px',
-                borderRadius: '24px',
-                padding: '24px',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+                margin: 0,
+                padding: link.featured ? '18px' : '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: link.background,
+                color: link.textColor,
+                borderColor: link.borderColor,
+                borderWidth: '1.5px',
+                boxShadow: link.featured ? '0 12px 24px rgba(15, 23, 42, 0.06)' : '0 6px 16px rgba(15, 23, 42, 0.04)',
+                position: 'relative',
+                overflow: 'hidden',
               }}
-              onClick={(e) => e.stopPropagation()}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h3 style={{ fontSize: '20px' }}>야구 일기 쓰기</h3>
-                <button onClick={() => setIsModalOpen(false)}><X size={24} color="var(--text-light)" /></button>
-              </div>
-
-              {finishedGames.length > 0 ? (
-                <>
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>날짜 선택</label>
-                    <select 
-                      value={selectedDiaryDate}
-                      onChange={(e) => handleDateChange(e.target.value)}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: `linear-gradient(90deg, ${link.accentColor}10 0%, rgba(255,255,255,0) 45%)`,
+                  pointerEvents: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div
+                  style={{
+                    width: link.featured ? '58px' : '72px',
+                    height: link.featured ? '48px' : '42px',
+                    borderRadius: '14px',
+                    background: link.logoSurface,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '6px 10px',
+                    flexShrink: 0,
+                    overflow: 'hidden',
+                    border: `1px solid ${link.borderColor}`,
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9)',
+                    position: 'relative',
+                    zIndex: 1,
+                  }}
+                >
+                  {link.logoPath ? (
+                    <Image
+                      src={link.logoPath}
+                      alt={link.logoAlt ?? link.name}
+                      width={link.featured ? 58 : 72}
+                      height={link.featured ? 48 : 42}
                       style={{
                         width: '100%',
-                        padding: '12px',
-                        borderRadius: 'var(--radius-sm)',
-                        border: '2px solid var(--border)',
-                        background: 'var(--background)',
-                        color: 'var(--text)',
-                        fontSize: '14px',
-                        outline: 'none',
-                        cursor: 'pointer'
+                        height: '100%',
+                        objectFit: 'contain',
+                        display: 'block',
+                      }}
+                    />
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: link.featured ? '15px' : '14px',
+                        fontWeight: 900,
+                        color: '#FFFFFF',
+                        letterSpacing: '-0.02em',
                       }}
                     >
-                      {finishedGames.map((g) => (
-                        <option key={g.date} value={g.date}>{g.date} {g.dayOfWeek ? `(${g.dayOfWeek})` : ''} - {g.stadium}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {selectedGame && (
-                    <div className="card" style={{ background: 'var(--background)', margin: '0 0 16px 0', border: 'none', padding: '16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '12px', color: 'var(--text-light)' }}>2026.{selectedGame.date} @{selectedGame.stadium}</span>
-                        <div style={{ display: 'flex', gap: '4px', background: 'white', padding: '2px', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                          <button 
-                            onClick={() => setGoingType('직관')}
-                            style={{ 
-                              padding: '4px 10px', 
-                              borderRadius: '10px', 
-                              fontSize: '12px', 
-                              fontWeight: 'bold',
-                              background: goingType === '직관' ? 'var(--primary)' : 'transparent',
-                              color: goingType === '직관' ? 'white' : 'var(--text-light)'
-                            }}
-                          >직관</button>
-                          <button 
-                            onClick={() => setGoingType('중계')}
-                            style={{ 
-                              padding: '4px 10px', 
-                              borderRadius: '10px', 
-                              fontSize: '12px', 
-                              fontWeight: 'bold',
-                              background: goingType === '중계' ? 'var(--secondary)' : 'transparent',
-                              color: goingType === '중계' ? 'white' : 'var(--text-light)'
-                            }}
-                          >중계</button>
-                        </div>
-                      </div>
-                      <div style={{ fontWeight: '800', fontSize: '18px', textAlign: 'center', letterSpacing: '-0.5px' }}>
-                        <span style={{ color: TEAM_NAME_TO_ID[selectedGame.awayTeam] === myTeam.id ? 'var(--text)' : 'var(--text-light)' }}>
-                          {selectedGame.awayTeam} {selectedGame.awayScore ?? ''}
-                        </span>
-                        <span style={{ margin: '0 8px', color: 'var(--border)' }}>:</span>
-                        <span style={{ color: TEAM_NAME_TO_ID[selectedGame.homeTeam] === myTeam.id ? 'var(--text)' : 'var(--text-light)' }}>
-                          {selectedGame.homeScore ?? ''} {selectedGame.homeTeam}
-                        </span>
-                      </div>
-                    </div>
+                      {link.badgeText}
+                    </span>
                   )}
-
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>별점</label>
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', margin: '8px 0' }}>
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button key={star} onClick={() => setRating(star)}>
-                          <Star size={36} fill={star <= rating ? 'var(--accent)' : 'none'} color={star <= rating ? 'var(--accent)' : 'var(--border)'} style={{ transition: 'all 0.2s' }} />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: '24px' }}>
-                    <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>메모</label>
-                    <textarea 
-                      value={reviewText}
-                      onChange={(e) => setReviewText(e.target.value)}
-                      placeholder="기억에 남는 순간을 적어보세요!"
-                      style={{
-                        width: '100%',
-                        padding: '12px',
-                        border: '2px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)',
-                        fontFamily: 'inherit',
-                        fontSize: '14px',
-                        minHeight: '100px',
-                        resize: 'none',
-                        outline: 'none',
-                        transition: 'border-color 0.2s'
-                      }}
-                      onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                      onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
-                    />
-                  </div>
-
-                  <button 
-                    className="pill-button" 
-                    style={{ width: '100%', padding: '16px', fontSize: '16px' }}
-                    onClick={handleSaveReview}
-                    disabled={rating === 0 || !reviewText.trim()}
-                  >
-                    기록 저장하기
-                  </button>
-                </>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                  <p style={{ fontSize: '32px', marginBottom: '12px' }}>😢</p>
-                  <p style={{ fontSize: '16px', color: 'var(--text-light)', fontWeight: 'bold' }}>아직 종료된 경기가 없습니다!</p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-light)', marginTop: '4px' }}>경기가 끝나면 일기를 남길 수 있어요.</p>
                 </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                <div>
+                  <div style={{ fontSize: link.featured ? '16px' : '15px', fontWeight: 800 }}>
+                    {link.name}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      color: link.descriptionColor,
+                      marginTop: '2px',
+                    }}
+                  >
+                    {link.description}
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  width: link.featured ? '38px' : '34px',
+                  height: link.featured ? '38px' : '34px',
+                  borderRadius: '9999px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: `${link.accentColor}12`,
+                  border: `1px solid ${link.accentColor}22`,
+                  position: 'relative',
+                  zIndex: 1,
+                }}
+              >
+                <ExternalLink size={link.featured ? 20 : 18} color={link.iconColor} />
+              </div>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <DiaryModal
+        key={`profile-${selectedDiaryDate}-${selectedRecord?.review ?? ''}-${selectedRecord?.rating ?? 0}`}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        myTeamId={myTeam.id}
+        selectedGame={selectedGame ?? null}
+        selectedDate={selectedDiaryDate}
+        onDateChange={handleDateChange}
+        finishedGames={finishedGames}
+        currentRecord={selectedRecord}
+        attendanceLabel={selectedRecord?.isAttending ? '직관' : '중계'}
+        year={currentYear}
+      />
     </div>
   );
 }

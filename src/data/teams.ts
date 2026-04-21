@@ -16,7 +16,7 @@ export const KBO_TEAMS: Team[] = [
     color: '#C30452',
     bgSecondary: '#F7E7ED',
     stadium: '잠실 야구장',
-    logo: '⚾️',
+    logo: '/team-logos/lg.png',
   },
   {
     id: 'kt',
@@ -25,7 +25,7 @@ export const KBO_TEAMS: Team[] = [
     color: '#000000',
     bgSecondary: '#EEEEEE',
     stadium: '수원 KT 위즈 파크',
-    logo: '🪄',
+    logo: '/team-logos/kt.png',
   },
   {
     id: 'ssg',
@@ -34,7 +34,7 @@ export const KBO_TEAMS: Team[] = [
     color: '#CE0E2D',
     bgSecondary: '#F9E7E9',
     stadium: '인천 SSG 랜더스 필드',
-    logo: '🚀',
+    logo: '/team-logos/ssg.png',
   },
   {
     id: 'nc',
@@ -43,7 +43,7 @@ export const KBO_TEAMS: Team[] = [
     color: '#315288',
     bgSecondary: '#EAEFF6',
     stadium: '창원 NC 파크',
-    logo: '🦖',
+    logo: '/team-logos/nc.png',
   },
   {
     id: 'doosan',
@@ -52,7 +52,7 @@ export const KBO_TEAMS: Team[] = [
     color: '#131230',
     bgSecondary: '#E7E7EB',
     stadium: '잠실 야구장',
-    logo: '🐻',
+    logo: '/team-logos/doosan.webp',
   },
   {
     id: 'kia',
@@ -61,7 +61,7 @@ export const KBO_TEAMS: Team[] = [
     color: '#EA0029',
     bgSecondary: '#FDE6EA',
     stadium: '광주 기아 챔피언스 필드',
-    logo: '🐯',
+    logo: '/team-logos/kia.jpg',
   },
   {
     id: 'lotte',
@@ -70,7 +70,7 @@ export const KBO_TEAMS: Team[] = [
     color: '#002955',
     bgSecondary: '#E6EAEF',
     stadium: '사직 야구장',
-    logo: '⚓️',
+    logo: '/team-logos/lotte.jpg',
   },
   {
     id: 'samsung',
@@ -79,7 +79,7 @@ export const KBO_TEAMS: Team[] = [
     color: '#074CA1',
     bgSecondary: '#E6EDF6',
     stadium: '대구 삼성 라이온즈 파크',
-    logo: '🦁',
+    logo: '/team-logos/samsung.png',
   },
   {
     id: 'hanwha',
@@ -88,7 +88,7 @@ export const KBO_TEAMS: Team[] = [
     color: '#F37321',
     bgSecondary: '#FEF1E9',
     stadium: '대전 한화생명 이글스 파크',
-    logo: '🦅',
+    logo: '/team-logos/hanwha.png',
   },
   {
     id: 'kiwoom',
@@ -97,6 +97,6 @@ export const KBO_TEAMS: Team[] = [
     color: '#820024',
     bgSecondary: '#F2E6E9',
     stadium: '고척 스카이돔',
-    logo: '🦸',
+    logo: '/team-logos/kiwoom.jpg',
   },
 ];

@@ -12,7 +12,7 @@ interface UseKboScheduleResult {
 /**
  * KBO 일정 데이터를 가져오는 클라이언트 훅
  */
-export function useKboSchedule(): UseKboScheduleResult {
+export function useKboSchedule(year?: number, month?: number): UseKboScheduleResult {
   const [schedules, setSchedules] = useState<KboMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,17 +23,22 @@ export function useKboSchedule(): UseKboScheduleResult {
     async function fetchData() {
       try {
         setLoading(true);
-        const res = await fetch('/api/schedule');
+        const params = new URLSearchParams();
+        if (year) params.set('year', String(year));
+        if (month) params.set('month', String(month));
+        const query = params.toString();
+        const res = await fetch(query ? `/api/schedule?${query}` : '/api/schedule');
         const data = await res.json();
 
         if (!cancelled) {
           if (data.success) {
             setSchedules(data.schedules);
+            setError(null);
           } else {
             setError(data.message || '데이터를 가져오지 못했어요.');
           }
         }
-      } catch (err) {
+      } catch {
         if (!cancelled) {
           setError('서버와 연결할 수 없어요 😢');
         }
@@ -46,7 +51,7 @@ export function useKboSchedule(): UseKboScheduleResult {
 
     fetchData();
     return () => { cancelled = true; };
-  }, []);
+  }, [year, month]);
 
   return { schedules, loading, error };
 }

@@ -33,6 +33,8 @@ yarn-error.log*
 # local research / scratch files
 kbo.html
 test_*.js
+IMG_src/
+Thumbs.db
 
 # env files (can opt-in for committing if needed)
 .env*
