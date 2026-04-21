@@ -76,6 +76,10 @@ export function isValidIsoDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+export function isValidMonthDayDate(value: string) {
+  return /^\d{2}\.\d{2}$/.test(value);
+}
+
 export function normalizeLineupDate(value: string) {
   if (isValidCompactDate(value)) {
     return value;
@@ -83,6 +87,12 @@ export function normalizeLineupDate(value: string) {
 
   if (isValidIsoDate(value)) {
     return value.replaceAll('-', '');
+  }
+
+  if (isValidMonthDayDate(value)) {
+    const today = new Date();
+    const [month, day] = value.split('.');
+    return `${today.getFullYear()}${month}${day}`;
   }
 
   return null;
