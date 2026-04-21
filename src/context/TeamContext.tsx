@@ -6,12 +6,15 @@ import { Team, KBO_TEAMS } from '@/data/teams';
 interface TeamContextType {
   myTeam: Team | null;
   selectTeam: (teamId: string) => void;
+  isGoingToday: boolean;
+  setIsGoingToday: (value: boolean) => void;
 }
 
 const TeamContext = createContext<TeamContextType | undefined>(undefined);
 
 export function TeamProvider({ children }: { children: React.ReactNode }) {
   const [myTeam, setMyTeam] = useState<Team | null>(null);
+  const [isGoingToday, setIsGoingToday] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
@@ -34,7 +37,7 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   if (!isInitialized) return null;
 
   return (
-    <TeamContext.Provider value={{ myTeam, selectTeam }}>
+    <TeamContext.Provider value={{ myTeam, selectTeam, isGoingToday, setIsGoingToday }}>
       {children}
     </TeamContext.Provider>
   );
