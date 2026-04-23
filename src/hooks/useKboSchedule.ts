@@ -12,7 +12,11 @@ interface UseKboScheduleResult {
 /**
  * KBO 일정 데이터를 가져오는 클라이언트 훅
  */
-export function useKboSchedule(year?: number, month?: number): UseKboScheduleResult {
+export function useKboSchedule(
+  year?: number,
+  month?: number,
+  options?: { regularSeasonOnly?: boolean }
+): UseKboScheduleResult {
   const [schedules, setSchedules] = useState<KboMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +30,7 @@ export function useKboSchedule(year?: number, month?: number): UseKboScheduleRes
         const params = new URLSearchParams();
         if (year) params.set('year', String(year));
         if (month) params.set('month', String(month));
+        if (options?.regularSeasonOnly) params.set('regularSeasonOnly', '1');
         const query = params.toString();
         const res = await fetch(query ? `/api/schedule?${query}` : '/api/schedule');
         const data = await res.json();
@@ -51,7 +56,7 @@ export function useKboSchedule(year?: number, month?: number): UseKboScheduleRes
 
     fetchData();
     return () => { cancelled = true; };
-  }, [year, month]);
+  }, [year, month, options?.regularSeasonOnly]);
 
   return { schedules, loading, error };
 }

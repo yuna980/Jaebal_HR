@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+.vscode/
 
 # debug
 npm-debug.log*
@@ -35,6 +36,9 @@ kbo.html
 test_*.js
 IMG_src/
 Thumbs.db
+
+# local Supabase CLI state
+supabase/.temp/
 
 # env files (can opt-in for committing if needed)
 .env*

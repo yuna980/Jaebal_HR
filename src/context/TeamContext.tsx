@@ -1,7 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useSyncExternalStore } from 'react';
+import React, { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { Team, KBO_TEAMS } from '@/data/teams';
+import { saveSelectedTeamToSupabase, syncSelectedTeamFromSupabase } from '@/lib/teamPreference';
 
 interface TeamContextType {
   myTeam: Team | null;
@@ -39,11 +40,16 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   const [isGoingToday, setIsGoingToday] = useState(false);
   const myTeam = KBO_TEAMS.find((team) => team.id === selectedTeamId) ?? null;
 
+  useEffect(() => {
+    void syncSelectedTeamFromSupabase();
+  }, []);
+
   const selectTeam = (teamId: string) => {
     const team = KBO_TEAMS.find((t) => t.id === teamId);
     if (team) {
       localStorage.setItem(TEAM_STORAGE_KEY, teamId);
       window.dispatchEvent(new Event(TEAM_CHANGE_EVENT));
+      void saveSelectedTeamToSupabase(teamId);
     }
   };
 

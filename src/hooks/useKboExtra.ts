@@ -35,16 +35,25 @@ export interface RosterData {
 
 export interface WeatherData {
   temperature: number | null;
-  precipitationProbability: number | null;
-  forecastTime: string;
+  precipitation: number | null;
+  airQualityPm10: number | null;
+  airQualityLabel: string | null;
+  observedTime: string;
 }
 
 export function useKboLineup(teamId: string | undefined, date: string) {
   const [lineup, setLineup] = useState<LineupData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(teamId && date));
+  const [loadedKey, setLoadedKey] = useState('');
+  const requestKey = teamId && date ? `${teamId}-${date}` : 'none';
 
   useEffect(() => {
-    if (!teamId || !date) return;
+    if (!teamId || !date) {
+      setLineup(null);
+      setLoading(false);
+      setLoadedKey('none');
+      return;
+    }
     
     const fetchLineup = async () => {
       setLoading(true);
@@ -56,20 +65,28 @@ export function useKboLineup(teamId: string | undefined, date: string) {
         setLineup(null);
       } finally {
         setLoading(false);
+        setLoadedKey(`${teamId}-${date}`);
       }
     };
     fetchLineup();
   }, [teamId, date]);
 
-  return { lineup, loading };
+  return { lineup, loading, loaded: loadedKey === requestKey && !loading };
 }
 
 export function useKboRoster(teamId: string | undefined) {
   const [roster, setRoster] = useState<RosterData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(teamId));
+  const [loadedKey, setLoadedKey] = useState('');
+  const requestKey = teamId ?? 'none';
 
   useEffect(() => {
-    if (!teamId) return;
+    if (!teamId) {
+      setRoster(null);
+      setLoading(false);
+      setLoadedKey('none');
+      return;
+    }
 
     const fetchRoster = async () => {
       setLoading(true);
@@ -81,20 +98,28 @@ export function useKboRoster(teamId: string | undefined) {
         setRoster(null);
       } finally {
         setLoading(false);
+        setLoadedKey(teamId);
       }
     };
     fetchRoster();
   }, [teamId]);
 
-  return { roster, loading };
+  return { roster, loading, loaded: loadedKey === requestKey && !loading };
 }
 
 export function useGameWeather(stadium: string | undefined, time: string | undefined) {
   const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(stadium));
+  const [loadedKey, setLoadedKey] = useState('');
+  const requestKey = stadium ? `${stadium}-${time ?? ''}` : 'none';
 
   useEffect(() => {
-    if (!stadium) return;
+    if (!stadium) {
+      setWeather(null);
+      setLoading(false);
+      setLoadedKey('none');
+      return;
+    }
 
     const fetchWeather = async () => {
       setLoading(true);
@@ -107,8 +132,10 @@ export function useGameWeather(stadium: string | undefined, time: string | undef
         if (res.data?.success) {
           setWeather({
             temperature: res.data.temperature,
-            precipitationProbability: res.data.precipitationProbability,
-            forecastTime: res.data.forecastTime,
+            precipitation: res.data.precipitation,
+            airQualityPm10: res.data.airQualityPm10,
+            airQualityLabel: res.data.airQualityLabel,
+            observedTime: res.data.observedTime,
           });
         } else {
           setWeather(null);
@@ -118,11 +145,12 @@ export function useGameWeather(stadium: string | undefined, time: string | undef
         setWeather(null);
       } finally {
         setLoading(false);
+        setLoadedKey(`${stadium}-${time ?? ''}`);
       }
     };
 
     fetchWeather();
   }, [stadium, time]);
 
-  return { weather, loading };
+  return { weather, loading, loaded: loadedKey === requestKey && !loading };
 }

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import type { AnyNode } from 'domhandler';
 
 export interface KboMatch {
   /** 날짜 원본 문자열. 예: "04.16(목)" */
@@ -167,8 +168,9 @@ function parseTableRows(tableJson: string | undefined): KboBatter[] {
 
   try {
     const parsed = JSON.parse(tableJson) as KboTableData;
-    return (parsed.rows ?? [])
-      .map((row) => {
+    const batters: KboBatter[] = [];
+
+    for (const row of parsed.rows ?? []) {
         const cells = row.row ?? [];
         const order = Number(cells[0]?.Text ?? '');
         const position = cells[1]?.Text?.trim() ?? '';
@@ -176,17 +178,18 @@ function parseTableRows(tableJson: string | undefined): KboBatter[] {
         const war = cells[3]?.Text?.trim() ?? '';
 
         if (!Number.isFinite(order) || !position || !name) {
-          return null;
+          continue;
         }
 
-        return {
+        batters.push({
           order,
           position,
           name,
           war,
-        };
-      })
-      .filter((item): item is KboBatter => item !== null);
+        });
+    }
+
+    return batters;
   } catch (error) {
     console.error('라인업 테이블 파싱 실패:', error);
     return [];
@@ -332,7 +335,11 @@ function parseDayString(dayStr: string) {
 }
 
 // 📌 서버에서 KBO 대진표를 긁어오는 함수입니다.
-export async function fetchKboSchedule(targetYear?: number, targetMonth?: number): Promise<KboMatch[]> {
+export async function fetchKboSchedule(
+  targetYear?: number,
+  targetMonth?: number,
+  options?: { regularSeasonOnly?: boolean }
+): Promise<KboMatch[]> {
   try {
     const today = new Date();
     const year = targetYear ?? today.getFullYear();
@@ -340,9 +347,11 @@ export async function fetchKboSchedule(targetYear?: number, targetMonth?: number
     const month = String(monthNumber).padStart(2, '0');
     const detailMap = await fetchMonthlyGameDetails(year, monthNumber);
 
+    const srIdList = options?.regularSeasonOnly ? '0' : '0,1,3,4,5,7,9';
+
     const response = await axios.post(
       'https://www.koreabaseball.com/ws/Schedule.asmx/GetScheduleList',
-      `leId=1&srIdList=0,1,3,4,5,7,9&seasonId=${year}&gameMonth=${month}&teamId=`,
+      `leId=1&srIdList=${srIdList}&seasonId=${year}&gameMonth=${month}&teamId=`,
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -636,7 +645,7 @@ export async function fetchKboRoster(teamId: string, date = new Date()): Promise
     const tables = section.find('table.tNData');
     const [callUpTable, sendDownTable] = [tables.eq(0), tables.eq(1)];
 
-    const parseRosterTable = (table: cheerio.Cheerio<cheerio.Element>): KboRosterPlayer[] => {
+    const parseRosterTable = (table: cheerio.Cheerio<AnyNode>): KboRosterPlayer[] => {
       const players: KboRosterPlayer[] = [];
 
       table.find('tbody tr').each((_, row) => {

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { TeamProvider } from "@/context/TeamContext";
 import BottomNav from "@/components/BottomNav";
+import SupabaseBootstrap from "@/components/SupabaseBootstrap";
 
 export const metadata: Metadata = {
   title: "야구볼래 - 귀여운 야구 정보 서비스",
@@ -30,6 +31,7 @@ export default function RootLayout({
     <html lang="ko">
       <body>
         <TeamProvider>
+          <SupabaseBootstrap />
           {children}
           <BottomNav />
         </TeamProvider>

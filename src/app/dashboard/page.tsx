@@ -4,24 +4,29 @@ import { useTeam } from '@/context/TeamContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Navigation, Info, ChevronRight, Loader2 } from 'lucide-react';
-import { useKboSchedule, getTodayDateString } from '@/hooks/useKboSchedule';
-import { useGameWeather, useKboLineup, useKboRoster } from '@/hooks/useKboExtra';
-import { KboLineupData, KboRosterData, TEAM_NAME_TO_ID } from '@/lib/kboScraper';
+import { MapPin, Navigation, Info, Loader2 } from 'lucide-react';
+import { getTodayDateString } from '@/hooks/useKboSchedule';
+import { useGameScheduleMonth } from '@/hooks/useGameScheduleMonth';
+import { useTodayGameSchedule } from '@/hooks/useTodayGameSchedule';
+import { useHeadToHeadRecord } from '@/hooks/useHeadToHeadRecord';
+import { RosterData, useGameWeather, useKboLineup, useKboRoster } from '@/hooks/useKboExtra';
+import { KboLineupData, TEAM_NAME_TO_ID } from '@/lib/kboScraper';
 import { KBO_TEAMS } from '@/data/teams';
 import TeamLogo from '@/components/TeamLogo';
-import { findRecordForDate, formatDiaryDate, setAttendanceForGame, useFanDiaryRecords } from '@/lib/fanDiary';
+import { formatDiaryDate } from '@/lib/fanDiary';
+import { findAttendanceRecord, setAttendanceForGame, useAttendanceRecords } from '@/lib/attendance';
 
 const FIELD_POSITIONS = {
-  dh: { label: 'DH', left: '18%', top: '84%' },
-  lf: { label: 'LF', left: '16%', top: '18%' },
-  cf: { label: 'CF', left: '50%', top: '7%' },
-  rf: { label: 'RF', left: '84%', top: '18%' },
-  ss: { label: 'SS', left: '30%', top: '33%' },
-  second: { label: '2B', left: '71%', top: '37%' },
-  third: { label: '3B', left: '19%', top: '55%' },
-  first: { label: '1B', left: '81%', top: '55%' },
-  c: { label: 'C', left: '50%', top: '88%' },
+  dh: { label: 'DH', left: '13%', top: '82%', scale: 1.04 },
+  lf: { label: 'LF', left: '16%', top: '22%', scale: 0.9 },
+  cf: { label: 'CF', left: '50%', top: '10%', scale: 0.88 },
+  rf: { label: 'RF', left: '84%', top: '22%', scale: 0.9 },
+  ss: { label: 'SS', left: '34%', top: '43%', scale: 0.95 },
+  second: { label: '2B', left: '66%', top: '43%', scale: 0.95 },
+  third: { label: '3B', left: '19%', top: '58%', scale: 1 },
+  first: { label: '1B', left: '81%', top: '58%', scale: 1 },
+  p: { label: 'P', left: '50%', top: '55%', scale: 1 },
+  c: { label: 'C', left: '50%', top: '87%', scale: 1.06 },
 } as const;
 
 function getFieldKey(position: string) {
@@ -55,7 +60,77 @@ interface LineupPanelProps {
   battingOrder: KboLineupData['battingOrder'];
   isLineupOut: boolean;
   accentColor: string;
-  roster?: KboRosterData | null;
+  roster?: RosterData | null;
+}
+
+function PlayerBadge({
+  label,
+  name,
+  left,
+  top,
+  scale = 1,
+}: {
+  label: string;
+  name: string;
+  left: string;
+  top: string;
+  scale?: number;
+}) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left,
+        top,
+        transform: `translate(-50%, -50%) scale(${scale})`,
+        zIndex: 10,
+        minWidth: '44px',
+        minHeight: '44px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <div
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '6px',
+          background: 'rgba(24, 32, 24, 0.9)',
+          backdropFilter: 'blur(6px)',
+          color: '#f5f5f5',
+          padding: 'clamp(4px, 0.7vw, 7px) clamp(7px, 1.2vw, 12px)',
+          borderRadius: '12px',
+          boxShadow: '0 6px 16px rgba(0, 0, 0, 0.2)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          whiteSpace: 'nowrap',
+          maxWidth: '112px',
+        }}
+      >
+        <span
+          style={{
+            color: '#fbbf24',
+            fontSize: 'clamp(8px, 2vw, 10px)',
+            fontWeight: 900,
+            letterSpacing: '0.08em',
+            lineHeight: 1,
+          }}
+        >
+          {label}
+        </span>
+        <span
+          style={{
+            fontSize: 'clamp(10px, 2.8vw, 12px)',
+            fontWeight: 800,
+            lineHeight: 1,
+          }}
+        >
+          {name}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function LineupPanel({ title, pitcher, battingOrder, isLineupOut, accentColor, roster }: LineupPanelProps) {
@@ -70,7 +145,6 @@ function LineupPanel({ title, pitcher, battingOrder, isLineupOut, accentColor, r
       };
     })
     .filter((batter): batter is NonNullable<typeof batter> => batter !== null);
-
   return (
     <div style={{ marginBottom: '18px' }}>
       <div style={{ fontSize: '16px', fontWeight: 800, marginBottom: '12px' }}>{title}</div>
@@ -131,112 +205,83 @@ function LineupPanel({ title, pitcher, battingOrder, isLineupOut, accentColor, r
             <div
               style={{
                 position: 'relative',
-                aspectRatio: '4 / 3',
-                borderRadius: '22px',
+                aspectRatio: '16 / 9',
+                borderRadius: '24px',
                 overflow: 'hidden',
-                background: '#49754f',
-                border: '6px solid #3a5e3f',
-                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+                background: '#3f6f34',
+                border: '1px solid rgba(43, 64, 34, 0.45)',
+                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)',
                 marginBottom: '16px',
               }}
             >
               <div
                 style={{
                   position: 'absolute',
-                  left: '50%',
-                  top: '12%',
-                  width: '86%',
-                  height: '70%',
-                  background: '#c7b79c',
-                  borderRadius: '50% 50% 22% 22% / 72% 72% 20% 20%',
-                  transform: 'translateX(-50%)',
-                  zIndex: 0,
-                }}
-              />
-
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '50%',
-                  top: '50%',
-                  width: '58%',
-                  height: '58%',
-                  background: '#49754f',
-                  transform: 'translate(-50%, -50%) rotate(45deg)',
-                  borderRadius: '18px',
+                  inset: 0,
+                  background:
+                    'repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 2px, rgba(0,0,0,0) 2px 14px)',
+                  opacity: 0.35,
                   zIndex: 1,
                 }}
               />
 
-              {[
-                { left: '33%', top: '49%', width: '40%', rotate: '-45deg' },
-                { left: '67%', top: '49%', width: '40%', rotate: '45deg' },
-                { left: '40%', top: '31%', width: '28%', rotate: '-45deg' },
-                { left: '60%', top: '31%', width: '28%', rotate: '45deg' },
-              ].map((path, index) => (
-                <div
-                  key={`basepath-${index}`}
-                  style={{
-                    position: 'absolute',
-                    left: path.left,
-                    top: path.top,
-                    width: path.width,
-                    height: '18px',
-                    background: '#a99274',
-                    borderRadius: '9999px',
-                    transform: `translate(-50%, -50%) rotate(${path.rotate})`,
-                    zIndex: 2,
-                  }}
-                />
-              ))}
-
               <div
                 style={{
                   position: 'absolute',
-                  left: '50%',
-                  bottom: '15%',
-                  width: '118%',
-                  height: '3px',
-                  background: 'rgba(255,255,255,0.28)',
-                  transform: 'translateX(-50%) rotate(-45deg)',
-                  transformOrigin: 'center',
-                  zIndex: 0,
+                  left: '-2%',
+                  bottom: '16%',
+                  width: '48%',
+                  height: '2px',
+                  background: 'rgba(255, 255, 255, 0.55)',
+                  transform: 'rotate(36deg)',
+                  transformOrigin: 'left center',
+                  zIndex: 3,
                 }}
               />
 
               <div
                 style={{
                   position: 'absolute',
-                  left: '50%',
-                  bottom: '15%',
-                  width: '118%',
-                  height: '3px',
-                  background: 'rgba(255,255,255,0.28)',
-                  transform: 'translateX(-50%) rotate(45deg)',
-                  transformOrigin: 'center',
-                  zIndex: 0,
+                  right: '-2%',
+                  bottom: '16%',
+                  width: '48%',
+                  height: '2px',
+                  background: 'rgba(255, 255, 255, 0.55)',
+                  transform: 'rotate(-36deg)',
+                  transformOrigin: 'right center',
+                  zIndex: 3,
                 }}
               />
 
-              <div
+              <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
                 style={{
                   position: 'absolute',
-                  left: '50%',
-                  top: '50%',
-                  width: '74px',
-                  height: '74px',
-                  background: '#a99274',
-                  borderRadius: '9999px',
-                  transform: 'translate(-50%, -50%)',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
                   zIndex: 2,
                 }}
-              />
+              >
+                <path
+                  d="M24 58 L50 34 L76 58 Q68 71 50 84 Q32 71 24 58 Z"
+                  fill="#b99674"
+                  stroke="rgba(89, 44, 23, 0.3)"
+                  strokeWidth="0.4"
+                />
+                <path
+                  d="M33 58 L50 41 L67 58 Q61.5 66.5 50 75 Q38.5 66.5 33 58 Z"
+                  fill="#3f6f34"
+                />
+                <circle cx="50" cy="55" r="6.8" fill="#9f7a59" />
+              </svg>
 
               {[
-                { left: '50%', top: '20%' },
-                { left: '76%', top: '49%' },
+                { left: '50%', top: '34%' },
+                { left: '76%', top: '58%' },
                 { left: '50%', top: '84%' },
-                { left: '24%', top: '49%' },
+                { left: '24%', top: '58%' },
               ].map((base, index) => (
                 <div
                   key={index}
@@ -244,12 +289,12 @@ function LineupPanel({ title, pitcher, battingOrder, isLineupOut, accentColor, r
                     position: 'absolute',
                     left: base.left,
                     top: base.top,
-                    width: '44px',
-                    height: '44px',
-                    background: '#a99274',
+                    width: index === 2 ? '40px' : '26px',
+                    height: index === 2 ? '40px' : '26px',
+                    background: index === 2 ? '#c6a88c' : '#b99674',
                     borderRadius: '9999px',
                     transform: 'translate(-50%, -50%)',
-                    zIndex: 3,
+                    zIndex: 5,
                   }}
                 >
                   <div
@@ -257,9 +302,9 @@ function LineupPanel({ title, pitcher, battingOrder, isLineupOut, accentColor, r
                       position: 'absolute',
                       left: '50%',
                       top: '50%',
-                      width: '12px',
-                      height: '12px',
-                      background: '#fff',
+                      width: index === 2 ? '12px' : '10px',
+                      height: index === 2 ? '12px' : '10px',
+                      background: 'rgba(255,255,255,0.98)',
                       transform: 'translate(-50%, -50%) rotate(45deg)',
                       borderRadius: '2px',
                     }}
@@ -267,76 +312,38 @@ function LineupPanel({ title, pitcher, battingOrder, isLineupOut, accentColor, r
                 </div>
               ))}
 
-              {fieldPlayers.map((batter) => (
-                <div
-                  key={`${batter.order}-${batter.name}-field`}
-                  style={{
-                    position: 'absolute',
-                    left: batter.field.left,
-                    top: batter.field.top,
-                    transform: 'translate(-50%, -50%)',
-                    zIndex: 4,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      minHeight: '40px',
-                      padding: '0 14px',
-                      minWidth: batter.field.label === 'CF' ? '126px' : undefined,
-                      borderRadius: '9999px',
-                      background: 'rgba(37, 58, 34, 0.96)',
-                      backdropFilter: 'blur(6px)',
-                      color: '#fff',
-                      fontSize: '12px',
-                      fontWeight: 800,
-                      whiteSpace: 'nowrap',
-                      boxShadow: '0 6px 12px rgba(0, 0, 0, 0.18)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                    }}
-                  >
-                    <span style={{ color: '#fbbf24', fontSize: '9px', fontWeight: 900 }}>
-                      {batter.field.label}
-                    </span>
-                    <span style={{ fontSize: '12px', fontWeight: 800 }}>{batter.name}</span>
-                  </div>
-                </div>
-              ))}
-
               <div
                 style={{
                   position: 'absolute',
                   left: '50%',
-                  top: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  zIndex: 5,
+                  bottom: '12%',
+                  width: '15px',
+                  height: '15px',
+                  background: 'rgba(255,255,255,0.96)',
+                  clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)',
+                  transform: 'translateX(-50%)',
+                  zIndex: 6,
                 }}
-              >
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    minHeight: '40px',
-                    padding: '0 14px',
-                    borderRadius: '9999px',
-                    background: 'rgba(37, 58, 34, 0.96)',
-                    color: '#fff',
-                    fontSize: '12px',
-                    fontWeight: 800,
-                    boxShadow: '0 6px 12px rgba(0, 0, 0, 0.18)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <span style={{ color: '#fbbf24', fontSize: '9px', fontWeight: 900 }}>P</span>
-                  {pitcher?.name ?? '-'}
-                </div>
-              </div>
+              />
+
+              {fieldPlayers.map((batter) => (
+                <PlayerBadge
+                  key={`${batter.order}-${batter.name}-field`}
+                  label={batter.field.label}
+                  name={batter.name}
+                  left={batter.field.left}
+                  top={batter.field.top}
+                  scale={batter.field.scale}
+                />
+              ))}
+
+              <PlayerBadge
+                label={FIELD_POSITIONS.p.label}
+                name={pitcher?.name ?? '-'}
+                left={FIELD_POSITIONS.p.left}
+                top={FIELD_POSITIONS.p.top}
+                scale={FIELD_POSITIONS.p.scale}
+              />
             </div>
 
             <div
@@ -456,64 +463,95 @@ function LineupPanel({ title, pitcher, battingOrder, isLineupOut, accentColor, r
 }
 
 interface ResultBadgeRowProps {
-  results: string[];
+  items: Array<{
+    result: string;
+    opponent?: string;
+  }>;
 }
 
-function ResultBadgeRow({ results }: ResultBadgeRowProps) {
+function ResultBadgeRow({ items }: ResultBadgeRowProps) {
   return (
     <div
       style={{
         background: 'var(--background)',
         borderRadius: 'var(--radius-sm)',
-        padding: '20px 16px',
+        padding: '4px',
       }}
     >
       <div
         style={{
           display: 'flex',
-          justifyContent: 'center',
-          gap: '12px',
-          flexWrap: 'wrap',
+          gap: '8px',
+          width: '100%',
         }}
       >
-        {results.map((result, index) => (
-          <div
-            key={`${result}-${index}`}
+        {items.map((item, index) => (
+          <motion.div
+            key={`${item.result}-${item.opponent ?? 'none'}-${index}`}
+            whileHover={{ y: -4 }}
+            transition={{ duration: 0.15 }}
             style={{
-              width: '52px',
-              height: '52px',
-              borderRadius: '9999px',
-              background:
-                result === '승'
-                  ? 'rgba(34, 197, 94, 0.14)'
-                  : result === '패'
-                    ? 'rgba(239, 68, 68, 0.14)'
-                    : 'rgba(148, 163, 184, 0.18)',
-              color:
-                result === '승'
-                  ? 'var(--success)'
-                  : result === '패'
-                    ? 'var(--error)'
-                    : 'var(--text-light)',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '22px',
-              fontWeight: 800,
-              border: '1px solid rgba(15, 23, 42, 0.04)',
+              flex: 1,
+              minWidth: 0,
+              padding: '10px 4px',
+              borderRadius: '12px',
+              borderBottom: `2px solid ${
+                item.result === '승'
+                  ? 'rgba(167, 243, 208, 1)'
+                  : item.result === '패'
+                    ? 'rgba(254, 205, 211, 1)'
+                    : 'rgba(203, 213, 225, 1)'
+              }`,
+              background:
+                item.result === '승'
+                  ? 'rgba(209, 250, 229, 1)'
+                  : item.result === '패'
+                    ? 'rgba(255, 228, 230, 1)'
+                    : 'rgba(241, 245, 249, 1)',
+              color:
+                item.result === '승'
+                  ? 'rgba(5, 150, 105, 1)'
+                  : item.result === '패'
+                    ? 'rgba(225, 29, 72, 1)'
+                    : 'rgba(71, 85, 105, 1)',
+              cursor: 'pointer',
             }}
           >
-            {result}
-          </div>
+            <div
+              style={{
+                fontSize: '18px',
+                fontWeight: 900,
+                lineHeight: 1,
+              }}
+            >
+              {item.result}
+            </div>
+            {item.opponent && (
+              <div
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  marginTop: '2px',
+                  opacity: 0.6,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: '100%',
+                }}
+              >
+                {item.opponent}
+              </div>
+            )}
+          </motion.div>
         ))}
       </div>
     </div>
   );
-}
-
-function parseScheduleDate(dateText: string, year: number) {
-  const [month, day] = dateText.split('.').map(Number);
-  return new Date(year, (month || 1) - 1, day || 1);
 }
 
 function isClearlyFinishedGame(game: {
@@ -538,97 +576,78 @@ function isClearlyFinishedGame(game: {
   return true;
 }
 
-function getRecentSeriesResults(
-  schedules: Array<{
-    date: string;
-    seasonYear?: number;
-    status: string;
-    homeTeam: string;
-    awayTeam: string;
-    homeScore: number | null;
-    awayScore: number | null;
-  }>,
-  myTeamId: string,
-  opponentName: string
-) {
-  const headToHeadGames = schedules
-    .filter(
-      (game) =>
-        game.status !== 'scheduled' &&
-        ((TEAM_NAME_TO_ID[game.homeTeam] === myTeamId && game.awayTeam === opponentName) ||
-          (TEAM_NAME_TO_ID[game.awayTeam] === myTeamId && game.homeTeam === opponentName))
-    )
-    .sort(
-      (left, right) =>
-        parseScheduleDate(left.date, left.seasonYear ?? new Date().getFullYear()).getTime() -
-        parseScheduleDate(right.date, right.seasonYear ?? new Date().getFullYear()).getTime()
-    );
-
-  if (headToHeadGames.length === 0) return [];
-
-  const seriesGroups: typeof headToHeadGames[] = [];
-  let currentGroup: typeof headToHeadGames = [];
-
-  headToHeadGames.forEach((game, index) => {
-    if (index === 0) {
-      currentGroup = [game];
-      return;
-    }
-
-    const previousGame = headToHeadGames[index - 1];
-    const gap =
-      (parseScheduleDate(game.date, game.seasonYear ?? new Date().getFullYear()).getTime() -
-        parseScheduleDate(previousGame.date, previousGame.seasonYear ?? new Date().getFullYear()).getTime()) /
-      (1000 * 60 * 60 * 24);
-
-    if (gap > 1) {
-      seriesGroups.push(currentGroup);
-      currentGroup = [game];
-      return;
-    }
-
-    currentGroup.push(game);
-  });
-
-  if (currentGroup.length > 0) {
-    seriesGroups.push(currentGroup);
-  }
-
-  const latestSeries = [...seriesGroups]
-    .reverse()
-    .find((group) => group.some((game) => game.status === 'finished'));
-
-  if (!latestSeries) return [];
-
-  return latestSeries
-    .filter((game) => game.status === 'finished')
-    .slice(-3)
-    .map((game) => {
-    const isMyTeamHome = TEAM_NAME_TO_ID[game.homeTeam] === myTeamId;
-    const myScore = isMyTeamHome ? game.homeScore ?? 0 : game.awayScore ?? 0;
-    const opponentScore = isMyTeamHome ? game.awayScore ?? 0 : game.homeScore ?? 0;
-
-    if (myScore > opponentScore) return '승';
-    if (myScore < opponentScore) return '패';
-    return '무';
-    });
+function HeadToHeadSummary({
+  total,
+  win,
+  loss,
+  draw,
+}: {
+  total: number;
+  win: number;
+  loss: number;
+  draw: number;
+}) {
+  return (
+    <div
+      style={{
+        background: 'var(--background)',
+        borderRadius: 'var(--radius-sm)',
+        padding: '22px 16px',
+        textAlign: 'center',
+      }}
+    >
+      <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text)', marginBottom: '14px' }}>
+        총 {total}경기
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: '10px',
+          flexWrap: 'wrap',
+        }}
+      >
+        {[
+          { label: '승', value: win, color: 'var(--success)', background: 'rgba(34, 197, 94, 0.12)' },
+          { label: '패', value: loss, color: 'var(--error)', background: 'rgba(239, 68, 68, 0.12)' },
+          { label: '무', value: draw, color: 'var(--text-light)', background: 'rgba(148, 163, 184, 0.16)' },
+        ].map((item) => (
+          <div
+            key={item.label}
+            style={{
+              minWidth: '78px',
+              padding: '12px 12px 14px',
+              borderRadius: '14px',
+              background: item.background,
+              border: '1px solid rgba(15, 23, 42, 0.04)',
+            }}
+          >
+            <div style={{ fontSize: '12px', fontWeight: 800, color: item.color, marginBottom: '4px' }}>
+              {item.label}
+            </div>
+            <div style={{ fontSize: '20px', fontWeight: 900, color: item.color }}>{item.value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function Dashboard() {
   const { myTeam } = useTeam();
   const router = useRouter();
-  const { schedules, loading, error } = useKboSchedule();
-  const diaryRecords = useFanDiaryRecords();
   const today = new Date();
-  const previousMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const previousSeasonYear = today.getFullYear() - 1;
-  const { schedules: previousMonthSchedules } = useKboSchedule(
-    previousMonthDate.getFullYear(),
-    previousMonthDate.getMonth() + 1
+  const { schedules } = useGameScheduleMonth(
+    today.getFullYear(),
+    today.getMonth() + 1
   );
-  const { schedules: previousSeasonSeptemberSchedules } = useKboSchedule(previousSeasonYear, 9);
-  const { schedules: previousSeasonOctoberSchedules } = useKboSchedule(previousSeasonYear, 10);
-  
+  const {
+    schedule: todayGameSchedule,
+    loading: todayGameScheduleLoading,
+    error: todayGameScheduleError,
+  } = useTodayGameSchedule(myTeam?.id);
+  const attendanceRecords = useAttendanceRecords();
+  const previousSeasonYear = today.getFullYear() - 1;
   const todayStr = getTodayDateString();
   const { lineup } = useKboLineup(myTeam?.id, todayStr);
   const { roster } = useKboRoster(myTeam?.id);
@@ -640,29 +659,31 @@ export default function Dashboard() {
   }, [myTeam, router]);
 
   // 오늘 내 팀 경기 찾기
-  const myTeamGame = schedules.find(
-    (m) =>
-      m.date === todayStr &&
-      (TEAM_NAME_TO_ID[m.homeTeam] === myTeam?.id || TEAM_NAME_TO_ID[m.awayTeam] === myTeam?.id)
-  );
-  const { weather, loading: weatherLoading } = useGameWeather(myTeamGame?.stadium, myTeamGame?.time);
+  const myTeamGame = todayGameSchedule;
+  const { weather, loaded: weatherLoaded } = useGameWeather(myTeamGame?.stadium, myTeamGame?.time);
+  const opponentName = myTeamGame
+    ? TEAM_NAME_TO_ID[myTeamGame.homeTeam] === myTeam?.id
+      ? myTeamGame.awayTeam
+      : myTeamGame.homeTeam
+    : null;
+  const opponentTeamId = opponentName ? TEAM_NAME_TO_ID[opponentName] : undefined;
+  const {
+    record: lastSeasonHeadToHeadRecord,
+    loading: headToHeadLoading,
+  } = useHeadToHeadRecord(myTeam?.id, opponentTeamId, previousSeasonYear);
 
   if (!myTeam) return null;
   const todayFullDate = formatDiaryDate(today.getFullYear(), todayStr);
-  const todayRecord = findRecordForDate(diaryRecords, myTeam.id, todayFullDate);
-  const isGoingToday = todayRecord?.isAttending ?? false;
+  const todayAttendanceRecord = findAttendanceRecord(attendanceRecords, myTeam.id, todayFullDate);
+  const isGoingToday = todayAttendanceRecord?.isAttending ?? false;
   const isTodayGameActuallyFinished = myTeamGame ? isClearlyFinishedGame(myTeamGame, todayStr) : false;
   const isTodayGameCancelled = myTeamGame?.status === 'cancelled';
   const shouldShowFinishedState = Boolean(myTeamGame) && (isTodayGameCancelled || isTodayGameActuallyFinished);
 
   // 상대 팀 정보 가져오기
-  const opponentName = myTeamGame
-    ? TEAM_NAME_TO_ID[myTeamGame.homeTeam] === myTeam.id
-      ? myTeamGame.awayTeam
-      : myTeamGame.homeTeam
-    : null;
-  const lineupOpponentTeam = lineup?.opponentTeamName
-    ? KBO_TEAMS.find((team) => team.id === TEAM_NAME_TO_ID[lineup.opponentTeamName])
+  const lineupOpponentTeamName = lineup?.opponentTeamName ?? '';
+  const lineupOpponentTeam = lineupOpponentTeamName
+    ? KBO_TEAMS.find((team) => team.id === TEAM_NAME_TO_ID[lineupOpponentTeamName])
     : null;
 
   const awayTeam = myTeamGame ? KBO_TEAMS.find((t) => t.id === TEAM_NAME_TO_ID[myTeamGame.awayTeam]) : null;
@@ -678,47 +699,34 @@ export default function Dashboard() {
     )
     .slice(-5)
     .map((m) => {
-      if (m.status === 'cancelled') return '무';
       const isMyTeamHome = TEAM_NAME_TO_ID[m.homeTeam] === myTeam.id;
+      const opponent = isMyTeamHome ? m.awayTeam : m.homeTeam;
+      if (m.status === 'cancelled') {
+        return {
+          result: '무',
+          opponent,
+        };
+      }
       const myScore = isMyTeamHome ? m.homeScore! : m.awayScore!;
       const oppScore = isMyTeamHome ? m.awayScore! : m.homeScore!;
-      return myScore > oppScore ? '승' : myScore < oppScore ? '패' : '무';
+      return {
+        result: myScore > oppScore ? '승' : myScore < oppScore ? '패' : '무',
+        opponent,
+      };
     });
 
   // 오늘 날짜 포맷
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   const dateDisplay = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일 (${days[today.getDay()]})`;
 
-  const extendedSchedules = [
-    ...previousSeasonSeptemberSchedules.map((game) => ({ ...game, seasonYear: previousSeasonYear })),
-    ...previousSeasonOctoberSchedules.map((game) => ({ ...game, seasonYear: previousSeasonYear })),
-    ...previousMonthSchedules.map((game) => ({ ...game, seasonYear: previousMonthDate.getFullYear() })),
-    ...schedules.map((game) => ({ ...game, seasonYear: today.getFullYear() })),
-  ].filter(
-    (game, index, array) =>
-      array.findIndex(
-        (candidate) =>
-          candidate.date === game.date &&
-          candidate.awayTeam === game.awayTeam &&
-          candidate.homeTeam === game.homeTeam &&
-          candidate.time === game.time
-      ) === index
-  );
-
-  const recentSeriesResults =
-    myTeam && opponentName
-      ? getRecentSeriesResults(extendedSchedules, myTeam.id, opponentName)
-      : [];
-
   const cancelledMessage = myTeamGame?.note?.includes('우천취소')
     ? '해당 경기는 우천취소 되었습니다'
     : myTeamGame?.status === 'cancelled'
       ? `해당 경기는 ${myTeamGame.note || '취소'} 되었습니다`
       : null;
-  const shouldWaitForWeather =
-    Boolean(myTeamGame) &&
-    myTeamGame?.status === 'scheduled' &&
-    weatherLoading;
+  const dashboardLoading =
+    todayGameScheduleLoading ||
+    Boolean(myTeamGame?.stadium && !weatherLoaded);
 
   return (
     <div className="container">
@@ -732,7 +740,7 @@ export default function Dashboard() {
       </header>
 
       {/* Loading State */}
-      {(loading || shouldWaitForWeather) && (
+      {dashboardLoading && (
         <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
           <motion.div
             animate={{ rotate: 360 }}
@@ -742,21 +750,21 @@ export default function Dashboard() {
             <Loader2 size={32} color="var(--primary)" />
           </motion.div>
           <p style={{ color: 'var(--text-light)', marginTop: '12px', fontSize: '14px' }}>
-            경기 정보를 불러오고 있어요... ⚾
+            오늘의 야구 정보를 가져오는 중입니다... ⚾
           </p>
         </div>
       )}
 
       {/* Error State */}
-      {error && !loading && !shouldWaitForWeather && (
+      {todayGameScheduleError && !dashboardLoading && (
         <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
           <p style={{ fontSize: '16px', marginBottom: '8px' }}>😢</p>
-          <p style={{ color: 'var(--text-light)', fontSize: '14px' }}>{error}</p>
+          <p style={{ color: 'var(--text-light)', fontSize: '14px' }}>{todayGameScheduleError}</p>
         </div>
       )}
 
       {/* No Game Today */}
-      {!loading && !shouldWaitForWeather && !error && !myTeamGame && (
+      {!dashboardLoading && !todayGameScheduleError && !myTeamGame && (
         <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
           <p style={{ fontSize: '48px', marginBottom: '12px' }}>😴</p>
           <p style={{ fontWeight: '800', fontSize: '18px', marginBottom: '4px' }}>오늘은 경기가 없어요</p>
@@ -765,7 +773,7 @@ export default function Dashboard() {
       )}
 
       {/* Today's Match Card */}
-      {!loading && !shouldWaitForWeather && myTeamGame && (
+      {!dashboardLoading && myTeamGame && (
         <>
           <motion.div
             className="card"
@@ -790,7 +798,7 @@ export default function Dashboard() {
                       fontWeight: 700,
                     }}
                   >
-                    {Math.round(weather.temperature ?? 0)}℃ · 강수 {weather.precipitationProbability ?? 0}%
+                    {Math.round(weather.temperature ?? 0)}℃ · 강수 {(weather.precipitation ?? 0).toFixed(1)}mm · 미세먼지 {weather.airQualityLabel ?? '-'}
                   </div>
                 )}
               </div>
@@ -806,18 +814,8 @@ export default function Dashboard() {
                 </div>
                 <div style={{ fontWeight: '800' }}>{myTeamGame.awayTeam}</div>
               </div>
-                <div style={{ textAlign: 'center' }}>
-                {isTodayGameActuallyFinished ? (
-                  <div style={{ fontSize: '28px', fontWeight: '800' }}>
-                    <span style={{ color: (myTeamGame.awayScore ?? 0) > (myTeamGame.homeScore ?? 0) ? 'var(--success)' : 'var(--text-light)' }}>
-                      {myTeamGame.awayScore}
-                    </span>
-                    <span style={{ color: 'var(--border)', margin: '0 8px' }}>:</span>
-                    <span style={{ color: (myTeamGame.homeScore ?? 0) > (myTeamGame.awayScore ?? 0) ? 'var(--success)' : 'var(--text-light)' }}>
-                      {myTeamGame.homeScore}
-                    </span>
-                  </div>
-                ) : isTodayGameCancelled ? (
+              <div style={{ textAlign: 'center' }}>
+                {isTodayGameCancelled ? (
                   <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--error)' }}>취소</div>
                 ) : (
                   <div style={{ fontSize: '24px', fontWeight: '800', color: 'var(--border)' }}>VS</div>
@@ -833,19 +831,7 @@ export default function Dashboard() {
             </div>
 
             <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.5)', padding: '10px', borderRadius: 'var(--radius-sm)', fontSize: '14px' }}>
-              {isTodayGameActuallyFinished ? (
-                <span>
-                  경기 종료 — {' '}
-                  {(() => {
-                    const isMyHome = TEAM_NAME_TO_ID[myTeamGame.homeTeam] === myTeam.id;
-                    const myScore = isMyHome ? myTeamGame.homeScore! : myTeamGame.awayScore!;
-                    const oppScore = isMyHome ? myTeamGame.awayScore! : myTeamGame.homeScore!;
-                    if (myScore > oppScore) return <strong style={{ color: 'var(--success)' }}>승리! 🎉</strong>;
-                    if (myScore < oppScore) return <strong style={{ color: 'var(--error)' }}>패배 😢</strong>;
-                    return <strong>무승부</strong>;
-                  })()}
-                </span>
-              ) : isTodayGameCancelled ? (
+              {isTodayGameCancelled ? (
                 <strong style={{ color: 'var(--error)' }}>{cancelledMessage}</strong>
               ) : (
                 <span>오늘 경기 <strong>{myTeamGame.time}</strong> 시작!</span>
@@ -919,7 +905,7 @@ export default function Dashboard() {
                 title={`${myTeam.name} 선발 투수 및 라인업`}
                 pitcher={lineup.startingPitcher}
                 battingOrder={lineup.battingOrder}
-                isLineupOut={lineup.isLineupOut}
+                isLineupOut={Boolean(lineup.isLineupOut)}
                 accentColor={myTeam.color}
                 roster={roster}
               />
@@ -940,7 +926,7 @@ export default function Dashboard() {
                 title={`${lineup.opponentTeamName ?? '상대 팀'} 선발 투수 및 라인업`}
                 pitcher={lineup.opponentStartingPitcher}
                 battingOrder={lineup.opponentBattingOrder}
-                isLineupOut={lineup.isLineupOut}
+                isLineupOut={Boolean(lineup.isLineupOut)}
                 accentColor={lineupOpponentTeam?.color ?? 'var(--primary)'}
               />
             </motion.div>
@@ -973,53 +959,74 @@ export default function Dashboard() {
       )}
 
       {/* Form Summary */}
-      {!loading && (myTeamResults.length > 0 || (opponentName && recentSeriesResults.length > 0)) && (
+      {!dashboardLoading && (myTeamResults.length > 0 || (opponentName && lastSeasonHeadToHeadRecord && lastSeasonHeadToHeadRecord.total > 0) || headToHeadLoading) && (
         <div style={{ marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>
+          <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>
             {myTeam.name} 이기고 있나요?
           </h3>
 
           {myTeamResults.length > 0 && (
-            <div className="card" style={{ padding: '20px', marginBottom: '16px' }}>
-              <div style={{ marginBottom: '12px' }}>
+            <div className="card" style={{ padding: '20px', marginBottom: '18px' }}>
+              <div style={{ marginBottom: '16px' }}>
                 <div style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px' }}>
                   {myTeam.name} 최근 전적
                 </div>
                 <div style={{ fontSize: '13px', color: 'var(--text-light)' }}>
-                  최근 {myTeamResults.length}경기
+                  최근 {myTeamResults.length}경기 결과
                 </div>
               </div>
-              <ResultBadgeRow results={myTeamResults} />
+              <div
+                style={{
+                  border: '1px solid rgba(15, 23, 42, 0.08)',
+                  borderRadius: '18px',
+                  padding: '20px 14px',
+                  background: 'rgba(255,255,255,0.4)',
+                }}
+              >
+                <ResultBadgeRow items={myTeamResults} />
+              </div>
             </div>
           )}
 
-          {opponentName && recentSeriesResults.length > 0 && (
-            <div className="card" style={{ padding: '20px' }}>
-              <div style={{ marginBottom: '12px' }}>
+          {opponentName && (
+            <>
+              <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>
+                {myTeam.name} 이길 수 있나요?
+              </h3>
+              <div className="card" style={{ padding: '20px' }}>
+                <div style={{ marginBottom: '16px' }}>
                 <div style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px' }}>
                   상대 전적 (vs {opponentName})
                 </div>
                 <div style={{ fontSize: '13px', color: 'var(--text-light)' }}>
-                  최근 시리즈
+                  지난 정규시즌 기준 누적 전적
                 </div>
               </div>
-              <ResultBadgeRow results={recentSeriesResults} />
-            </div>
+                <div
+                  style={{
+                    border: '1px solid rgba(15, 23, 42, 0.08)',
+                    borderRadius: '18px',
+                    padding: '20px 14px',
+                  background: 'rgba(255,255,255,0.4)',
+                  }}
+                >
+                  {headToHeadLoading ? (
+                    <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-light)', fontSize: '14px' }}>
+                      상대 전적을 불러오고 있어요...
+                    </div>
+                  ) : lastSeasonHeadToHeadRecord && lastSeasonHeadToHeadRecord.total > 0 ? (
+                    <HeadToHeadSummary {...lastSeasonHeadToHeadRecord} />
+                  ) : (
+                    <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-light)', fontSize: '14px' }}>
+                      아직 저장된 지난 시즌 전적이 없습니다.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
         </div>
       )}
-
-      {/* Quick Links */}
-      <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => router.push('/schedule')}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ fontSize: '24px' }}>🗓️</div>
-          <div>
-            <div style={{ fontWeight: 'bold' }}>대진표 보기</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-light)' }}>이번 달 전체 일정</div>
-          </div>
-        </div>
-        <ChevronRight size={20} color="var(--border)" />
-      </div>
     </div>
   );
 }

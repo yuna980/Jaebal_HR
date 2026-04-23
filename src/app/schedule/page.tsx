@@ -6,11 +6,13 @@ import { CalendarDays, ChevronLeft, ChevronRight, Loader2, MapPin, X } from 'luc
 import { useTeam } from '@/context/TeamContext';
 import TeamLogo from '@/components/TeamLogo';
 import { useKboLineup } from '@/hooks/useKboExtra';
-import { useKboSchedule, getTodayDateString } from '@/hooks/useKboSchedule';
+import { useGameScheduleMonth } from '@/hooks/useGameScheduleMonth';
+import { getTodayDateString } from '@/hooks/useKboSchedule';
 import { KboMatch, TEAM_NAME_TO_ID } from '@/lib/kboScraper';
 import { KBO_TEAMS } from '@/data/teams';
 import DiaryModal from '@/components/DiaryModal';
 import { findRecordForDate, formatDiaryDate, useFanDiaryRecords } from '@/lib/fanDiary';
+import { findAttendanceRecord, useAttendanceRecords } from '@/lib/attendance';
 
 interface CalendarCell {
   key: string;
@@ -50,7 +52,9 @@ function buildCalendarCells(baseDate: Date, schedules: KboMatch[], todayStr: str
   });
 }
 
-function getResultLabel(game: KboMatch) {
+type GameResultLabel = '승' | '패' | '무';
+
+function getResultLabel(game: KboMatch): { away: GameResultLabel; home: GameResultLabel } | null {
   if (game.status !== 'finished') return null;
 
   const awayScore = game.awayScore ?? 0;
@@ -135,8 +139,9 @@ export default function SchedulePage() {
   const [selectedGameKey, setSelectedGameKey] = useState<string | null>(null);
   const [isDiaryModalOpen, setIsDiaryModalOpen] = useState(false);
   const diaryRecords = useFanDiaryRecords();
+  const attendanceRecords = useAttendanceRecords();
 
-  const { schedules, loading, error } = useKboSchedule(
+  const { schedules, loading, error } = useGameScheduleMonth(
     visibleMonth.getFullYear(),
     visibleMonth.getMonth() + 1
   );
@@ -211,7 +216,9 @@ export default function SchedulePage() {
   const selectedFullDate = selectedDate ? formatDiaryDate(visibleMonth.getFullYear(), selectedDate) : '';
   const selectedDiaryRecord =
     selectedDate && myTeam ? findRecordForDate(diaryRecords, myTeam.id, selectedFullDate) : null;
-  const attendanceLabel = selectedDiaryRecord?.isAttending ? '직관' : '중계';
+  const selectedAttendanceRecord =
+    selectedDate && myTeam ? findAttendanceRecord(attendanceRecords, myTeam.id, selectedFullDate) : null;
+  const attendanceLabel = selectedAttendanceRecord?.isAttending ? '직관' : '중계';
 
   return (
     <div className="container">
@@ -221,7 +228,7 @@ export default function SchedulePage() {
           <h2 style={{ fontSize: '24px' }}>{getMonthLabel(visibleMonth)} 대진표</h2>
         </div>
         <p style={{ color: 'var(--text-light)', fontSize: '14px' }}>
-          내 팀 경기는 라벨로 강조하고, 날짜를 누르면 같은 날 다른 경기 결과도 함께 볼 수 있어요.
+          이번달 우리 팀 경기를 한눈에 볼 수 있어요.
         </p>
       </header>
 
@@ -509,7 +516,7 @@ export default function SchedulePage() {
                             <span>{selectedGame.stadium}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {selectedDiaryRecord?.isAttending && (
+                            {selectedAttendanceRecord?.isAttending && (
                               <span
                                 style={{
                                   fontSize: '12px',
@@ -684,7 +691,7 @@ export default function SchedulePage() {
                                   background: 'var(--background)',
                                   fontSize: '12px',
                                   fontWeight: 800,
-                                  color: selectedDiaryRecord.isAttending ? myTeam.color : 'var(--text-light)',
+                                  color: selectedAttendanceRecord?.isAttending ? myTeam.color : 'var(--text-light)',
                                   marginBottom: '10px',
                                 }}
                               >
@@ -891,7 +898,7 @@ export default function SchedulePage() {
       </AnimatePresence>
 
       <DiaryModal
-        key={`schedule-${selectedDate ?? ''}-${selectedDiaryRecord?.review ?? ''}-${selectedDiaryRecord?.rating ?? 0}`}
+        key={`schedule-${isDiaryModalOpen ? 'open' : 'closed'}-${selectedDate ?? ''}-${selectedDiaryRecord?.review ?? ''}-${selectedDiaryRecord?.rating ?? 0}-${selectedAttendanceRecord?.isAttending ? 'attend' : 'watch'}`}
         isOpen={isDiaryModalOpen}
         onClose={() => setIsDiaryModalOpen(false)}
         myTeamId={myTeam.id}

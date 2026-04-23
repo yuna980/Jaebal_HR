@@ -4,19 +4,256 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useTeam } from '@/context/TeamContext';
 import { motion } from 'framer-motion';
-import { Ticket, History, TrendingUp, ShoppingBag, ExternalLink, Star } from 'lucide-react';
+import { Ticket, History, TrendingUp, ShoppingBag, ExternalLink, Star, Trophy, Sparkles, ArrowUp } from 'lucide-react';
 import { useState } from 'react';
-import { useKboSchedule } from '@/hooks/useKboSchedule';
-import { TEAM_NAME_TO_ID } from '@/lib/kboScraper';
+import { useGameScheduleMonth } from '@/hooks/useGameScheduleMonth';
+import { KboMatch, TEAM_NAME_TO_ID } from '@/lib/kboScraper';
 import TeamLogo from '@/components/TeamLogo';
 import DiaryModal from '@/components/DiaryModal';
 import { findRecordForDate, formatDiaryDate, useFanDiaryRecords } from '@/lib/fanDiary';
+import { findAttendanceRecord, useAttendanceRecords } from '@/lib/attendance';
+import { Team } from '@/data/teams';
+import { TeamStats, useTeamStats } from '@/hooks/useTeamStats';
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace('#', '');
+  const value = Number.parseInt(normalized.length === 3
+    ? normalized.split('').map((char) => char + char).join('')
+    : normalized, 16);
+
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
+  };
+}
+
+function getTeamStatsTheme(team: Team) {
+  const rgb = hexToRgb(team.color);
+  const main = team.color;
+
+  return {
+    main,
+    icon: main,
+    appBg: team.bgSecondary,
+    border: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.20)`,
+    badgeText: main,
+    badgeBorder: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.28)`,
+    glow: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.3)`,
+  };
+}
+
+function TeamStatsBanner({ team, stats, loading, error }: {
+  team: Team;
+  stats: TeamStats | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  const theme = getTeamStatsTheme(team);
+  const currentWinRate = stats?.currentWinRate ?? '-';
+  const previousWinRate = stats?.previousWinRate ?? '-';
+  const rank = stats?.rank ?? null;
+  const deltaLabel = stats?.winRateDeltaLabel ?? '▲ 0.000';
+  const deltaColor = (stats?.winRateDelta ?? 0) >= 0 ? '#22c55e' : '#ef4444';
+  const badgeText = stats?.isPostseasonZone ? '포스트시즌 진출권' : '포스트시즌 추격권';
+
+  return (
+    <section
+      style={{
+        marginBottom: '24px',
+        transition: 'background-color 500ms ease',
+      }}
+    >
+        <h3
+          style={{
+            fontSize: '18px',
+            lineHeight: 1.3,
+            fontWeight: 800,
+            color: '#1f2937',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '12px',
+            transition: 'color 300ms ease',
+          }}
+        >
+          <TrendingUp size={20} color={theme.icon} />
+          우리 팀 성적
+        </h3>
+
+        <div
+          className="card"
+          style={{
+            margin: 0,
+            background: '#fff',
+            border: `1.5px solid ${theme.border}`,
+            borderRadius: 'var(--radius)',
+            boxShadow: '0 6px 16px rgba(15, 23, 42, 0.04)',
+            display: 'grid',
+            gridTemplateColumns: '1fr 2px 1fr',
+            alignItems: 'center',
+            padding: '18px 16px',
+            marginBottom: '12px',
+            transition: 'border-color 300ms ease',
+          }}
+        >
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '15px', color: '#6b7280', fontWeight: 800, marginBottom: '6px' }}>
+              현재 승률
+            </div>
+            <div style={{ fontSize: '2rem', lineHeight: 1, fontWeight: 950, color: theme.main }}>
+              {loading ? '-' : currentWinRate}
+            </div>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                fontSize: '12px',
+                color: deltaColor,
+                fontWeight: 900,
+                marginTop: '8px',
+              }}
+            >
+              <ArrowUp size={13} />
+              {loading ? '0.000' : deltaLabel.replace('▲ ', '').replace('▼ ', '')}
+            </div>
+          </div>
+
+          <div style={{ width: '1px', height: '64px', background: theme.border }} />
+
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '15px', color: '#6b7280', fontWeight: 800, marginBottom: '6px' }}>
+              작년 이맘때
+            </div>
+            <div style={{ fontSize: '2rem', lineHeight: 1, fontWeight: 950, color: '#6b7280' }}>
+              {loading ? '-' : previousWinRate}
+            </div>
+            <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 800, marginTop: '8px' }}>
+              {stats?.previousRank ? `리그 ${stats.previousRank}위` : '순위 정보 없음'}
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="card"
+          style={{
+            margin: 0,
+            background: '#fff',
+            border: `1.5px solid ${theme.border}`,
+            borderRadius: 'var(--radius)',
+            boxShadow: '0 6px 16px rgba(15, 23, 42, 0.04)',
+            padding: '20px 18px',
+            textAlign: 'center',
+            transition: 'border-color 300ms ease',
+          }}
+        >
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '7px',
+              color: '#6b7280',
+              fontSize: '15px',
+              fontWeight: 900,
+              marginBottom: '8px',
+            }}
+          >
+            <Trophy size={18} color={theme.icon} />
+            현재 정규리그 순위
+          </div>
+          <div style={{ fontSize: '2rem', lineHeight: 1, fontWeight: 950, color: theme.main }}>
+            {loading ? '-' : rank ? `${rank}위` : '-'}
+          </div>
+
+          <div style={{ position: 'relative', display: 'inline-flex', marginTop: '14px' }}>
+            <div
+              style={{
+                position: 'absolute',
+                inset: '-7px',
+                background: theme.glow,
+                filter: 'blur(12px)',
+                borderRadius: '9999px',
+              }}
+            />
+            <div
+              style={{
+                position: 'relative',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 13px',
+                borderRadius: '9999px',
+                color: theme.badgeText,
+                border: `1.5px solid ${theme.badgeBorder}`,
+                background: '#fff',
+                fontSize: '13px',
+                fontWeight: 900,
+              }}
+            >
+              <Sparkles size={15} color={theme.icon} className="animate-pulse" />
+              {error ? '성적 확인 중' : badgeText}
+            </div>
+          </div>
+        </div>
+    </section>
+  );
+}
+
+function getDiaryGameSummary(recordDate: string, matches: KboMatch[], team: Team) {
+  const shortDate = recordDate.split('.').slice(-2).join('.');
+  const match = matches.find(
+    (game) =>
+      game.date === shortDate &&
+      (TEAM_NAME_TO_ID[game.homeTeam] === team.id || TEAM_NAME_TO_ID[game.awayTeam] === team.id)
+  );
+
+  if (!match) return null;
+
+  const isHomeTeam = TEAM_NAME_TO_ID[match.homeTeam] === team.id;
+  const opponent = isHomeTeam ? match.awayTeam : match.homeTeam;
+  const myScore = isHomeTeam ? match.homeScore : match.awayScore;
+  const opponentScore = isHomeTeam ? match.awayScore : match.homeScore;
+  const hasScore = typeof myScore === 'number' && typeof opponentScore === 'number';
+
+  return {
+    opponent,
+    myScore,
+    opponentScore,
+    hasScore,
+    status: match.status,
+  };
+}
+
+interface QuickLink {
+  name: string;
+  description: string;
+  url: string;
+  background: string;
+  textColor: string;
+  borderColor: string;
+  iconColor: string;
+  featured: boolean;
+  accentColor: string;
+  logoSurface: string;
+  descriptionColor: string;
+  badgeText?: string;
+  logoPath?: string;
+  logoAlt?: string;
+}
 
 export default function ProfilePage() {
   const { myTeam } = useTeam();
-  const { schedules } = useKboSchedule();
   const records = useFanDiaryRecords();
+  const attendanceRecords = useAttendanceRecords();
   const currentYear = new Date().getFullYear();
+  const today = new Date();
+  const { schedules } = useGameScheduleMonth(today.getFullYear(), today.getMonth() + 1);
+  const { stats: teamStats, loading: teamStatsLoading, error: teamStatsError } = useTeamStats(
+    myTeam?.id,
+    currentYear
+  );
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDiaryDate, setSelectedDiaryDate] = useState('');
@@ -28,7 +265,7 @@ export default function ProfilePage() {
 
   if (!myTeam) return null;
 
-  const quickLinks = [
+  const quickLinks: QuickLink[] = [
     {
       name: `${myTeam.name} 공식 온라인 샵`,
       description: '유니폼, 모자, 응원용품 보러가기',
@@ -104,6 +341,11 @@ export default function ProfilePage() {
 
   const selectedGame = finishedGames.find(g => g.date === selectedDiaryDate);
   const selectedRecord = findRecordForDate(records, myTeam.id, formatDiaryDate(currentYear, selectedDiaryDate));
+  const selectedAttendanceRecord = findAttendanceRecord(
+    attendanceRecords,
+    myTeam.id,
+    formatDiaryDate(currentYear, selectedDiaryDate)
+  );
 
   return (
     <div className="container" style={{ position: 'relative' }}>
@@ -137,24 +379,7 @@ export default function ProfilePage() {
         </div>
       </header>
 
-      {/* Team Stats */}
-      <div style={{ marginBottom: '24px' }}>
-        <h3 style={{ fontSize: '18px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <TrendingUp size={20} color="var(--primary)" /> 우리 팀 성적
-        </h3>
-        <div className="card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', textAlign: 'center' }}>
-          <div>
-            <div style={{ fontSize: '12px', color: 'var(--text-light)', marginBottom: '4px' }}>현재 승률</div>
-            <div style={{ fontSize: '24px', fontWeight: '800', color: myTeam.color }}>0.584</div>
-            <div style={{ fontSize: '10px', color: 'var(--success)' }}>▲ 0.021</div>
-          </div>
-          <div style={{ borderLeft: '1px solid var(--border)' }}>
-            <div style={{ fontSize: '12px', color: 'var(--text-light)', marginBottom: '4px' }}>작년 이맘때</div>
-            <div style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-light)' }}>0.512</div>
-            <div style={{ fontSize: '10px', color: 'var(--text-light)' }}>리그 4위</div>
-          </div>
-        </div>
-      </div>
+      <TeamStatsBanner team={myTeam} stats={teamStats} loading={teamStatsLoading} error={teamStatsError} />
 
       {/* Ticketing Sites */}
       <div style={{ marginBottom: '24px' }}>
@@ -186,6 +411,12 @@ export default function ProfilePage() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {history.map((record, i) => (
+            (() => {
+              const attendanceRecord = findAttendanceRecord(attendanceRecords, myTeam.id, record.date);
+              const attendanceLabel = attendanceRecord?.isAttending ? '직관' : '중계';
+              const gameSummary = getDiaryGameSummary(record.date, schedules, myTeam);
+
+              return (
             <motion.div 
               key={i} 
               className="card" 
@@ -199,16 +430,62 @@ export default function ProfilePage() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-light)' }}>{record.date} @{record.venue}</span>
-                <span style={{ 
-                  padding: '2px 8px', 
-                  borderRadius: '10px', 
-                  fontSize: '10px', 
-                  background: 'var(--background)',
-                  fontWeight: 'bold'
-                }}>
-                  {record.isAttending ? '직관' : '중계'} {record.result === 'W' ? '승리' : record.result === 'L' ? '패배' : record.result === '-' ? '진행중' : '무승부'}
-                </span>
               </div>
+              {gameSummary && (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    maxWidth: '100%',
+                    color: 'var(--text-light)',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    marginBottom: '7px',
+                  }}
+                >
+                  <span
+                    style={{
+                      color: 'var(--text)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {myTeam.name}
+                  </span>
+                  {gameSummary.hasScore ? (
+                    <span style={{ color: myTeam.color, fontWeight: 950, whiteSpace: 'nowrap' }}>
+                      {gameSummary.myScore} : {gameSummary.opponentScore}
+                    </span>
+                  ) : (
+                    <span style={{ color: myTeam.color, fontWeight: 950, whiteSpace: 'nowrap' }}>
+                      {gameSummary.status === 'cancelled' ? '경기 취소' : '스코어 미정'}
+                    </span>
+                  )}
+                  <span
+                    style={{
+                      color: 'var(--text)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {gameSummary.opponent}
+                  </span>
+                  <span
+                    style={{
+                      padding: '2px 7px',
+                      borderRadius: '9999px',
+                      background: 'var(--background)',
+                      color: 'var(--text-light)',
+                      fontSize: '10px',
+                      fontWeight: 900,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {attendanceLabel}
+                  </span>
+                </div>
+              )}
               <p style={{ fontSize: '14px', marginBottom: '8px' }}>{record.review}</p>
               <div style={{ display: 'flex', gap: '2px' }}>
                 {[...Array(5)].map((_, j) => (
@@ -216,6 +493,8 @@ export default function ProfilePage() {
                 ))}
               </div>
             </motion.div>
+              );
+            })()
           ))}
         </div>
       </div>
@@ -339,7 +618,6 @@ export default function ProfilePage() {
       </div>
 
       <DiaryModal
-        key={`profile-${selectedDiaryDate}-${selectedRecord?.review ?? ''}-${selectedRecord?.rating ?? 0}`}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         myTeamId={myTeam.id}
@@ -348,7 +626,7 @@ export default function ProfilePage() {
         onDateChange={handleDateChange}
         finishedGames={finishedGames}
         currentRecord={selectedRecord}
-        attendanceLabel={selectedRecord?.isAttending ? '직관' : '중계'}
+        attendanceLabel={selectedAttendanceRecord?.isAttending ? '직관' : '중계'}
         year={currentYear}
       />
     </div>

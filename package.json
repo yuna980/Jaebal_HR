@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.104.0",
     "axios": "^1.15.0",
     "cheerio": "^1.2.0",
     "framer-motion": "^12.38.0",

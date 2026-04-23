@@ -16,6 +16,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const rawYear = searchParams.get('year');
   const rawMonth = searchParams.get('month');
+  const regularSeasonOnly = searchParams.get('regularSeasonOnly') === '1';
   const yearParam = rawYear ? Number(rawYear) : undefined;
   const monthParam = rawMonth ? Number(rawMonth) : undefined;
 
@@ -36,7 +37,8 @@ export async function GET(request: Request) {
   try {
     const schedules = await fetchKboSchedule(
       typeof yearParam === 'number' && Number.isFinite(yearParam) ? yearParam : undefined,
-      typeof monthParam === 'number' && Number.isFinite(monthParam) ? monthParam : undefined
+      typeof monthParam === 'number' && Number.isFinite(monthParam) ? monthParam : undefined,
+      { regularSeasonOnly }
     );
 
     return NextResponse.json({
