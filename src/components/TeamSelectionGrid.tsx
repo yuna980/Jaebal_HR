@@ -13,7 +13,7 @@ interface TeamSelectionGridProps {
 }
 
 export default function TeamSelectionGrid({
-  title = '야구볼래?',
+  title = '제발 홈런',
   description = '당신이 응원하는 팀을 알려주세요!',
   redirectTo = '/dashboard',
 }: TeamSelectionGridProps) {

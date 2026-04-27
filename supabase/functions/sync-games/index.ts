@@ -15,6 +15,7 @@ interface SyncSummary {
   seasonYear: number;
   month: number;
   processed: number;
+  saved: number;
 }
 
 const corsHeaders = {
@@ -76,6 +77,10 @@ function dedupeGames<T extends {
   return Array.from(uniqueMap.values());
 }
 
+function isHistoryEligible(status: string) {
+  return status === "finished" || status === "cancelled";
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return json(405, { success: false, message: "POST 요청만 지원합니다." });
@@ -119,18 +124,20 @@ Deno.serve(async (req) => {
     for (const month of months) {
       const games = await fetchRegularSeasonGames(seasonYear, month);
       totalProcessed += games.length;
+      const completedGames = games.filter((game) => isHistoryEligible(game.status));
       summaries.push({
         seasonYear,
         month,
         processed: games.length,
+        saved: completedGames.length,
       });
 
-      if (body.dryRun || games.length === 0) {
+      if (body.dryRun || completedGames.length === 0) {
         continue;
       }
 
       const payload = dedupeGames(
-        games.map((game) => ({
+        completedGames.map((game) => ({
           season_year: game.seasonYear,
           game_date: game.gameDate,
           home_team_id: game.homeTeamId,

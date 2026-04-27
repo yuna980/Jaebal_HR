@@ -5,12 +5,12 @@ import BottomNav from "@/components/BottomNav";
 import SupabaseBootstrap from "@/components/SupabaseBootstrap";
 
 export const metadata: Metadata = {
-  title: "야구볼래 - 귀여운 야구 정보 서비스",
+  title: "제발 홈런",
   description: "내가 응원하는 팀의 정보와 직관 기록을 한번에!",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "야구볼래",
+    title: "제발 홈런",
   },
 };
 

@@ -404,7 +404,7 @@ function LineupPanel({ title, pitcher, battingOrder, isLineupOut, accentColor, r
             </div>
 
             {roster && (roster.callUps.length > 0 || roster.sendDowns.length > 0) && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
                 <div
                   style={{
                     borderRadius: '16px',
@@ -874,7 +874,7 @@ export default function Dashboard() {
                   animate={{ opacity: 1, height: 'auto' }}
                   style={{ marginBottom: '16px' }}
                 >
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
                     <button className="card" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, padding: '12px' }}>
                       <Navigation size={20} color="var(--primary)" />
                       <div style={{ textAlign: 'left' }}>

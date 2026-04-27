@@ -3,6 +3,9 @@
 import React, { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { Team, KBO_TEAMS } from '@/data/teams';
 import { saveSelectedTeamToSupabase, syncSelectedTeamFromSupabase } from '@/lib/teamPreference';
+import { prefetchTeamStats } from '@/hooks/useTeamStats';
+import { prefetchGameScheduleMonth } from '@/hooks/useGameScheduleMonth';
+import { prefetchTodayGameSchedule } from '@/hooks/useTodayGameSchedule';
 
 interface TeamContextType {
   myTeam: Team | null;
@@ -43,6 +46,14 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void syncSelectedTeamFromSupabase();
   }, []);
+
+  useEffect(() => {
+    if (!selectedTeamId) return;
+    const today = new Date();
+    prefetchTeamStats(selectedTeamId, today.getFullYear());
+    prefetchTodayGameSchedule(selectedTeamId);
+    prefetchGameScheduleMonth(today.getFullYear(), today.getMonth() + 1);
+  }, [selectedTeamId]);
 
   const selectTeam = (teamId: string) => {
     const team = KBO_TEAMS.find((t) => t.id === teamId);

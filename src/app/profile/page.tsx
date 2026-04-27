@@ -1,204 +1,30 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
-import { useTeam } from '@/context/TeamContext';
-import { motion } from 'framer-motion';
-import { Ticket, History, TrendingUp, ShoppingBag, ExternalLink, Star, Trophy, Sparkles, ArrowUp } from 'lucide-react';
-import { useState } from 'react';
-import { useGameScheduleMonth } from '@/hooks/useGameScheduleMonth';
-import { KboMatch, TEAM_NAME_TO_ID } from '@/lib/kboScraper';
-import TeamLogo from '@/components/TeamLogo';
+import { useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, ChevronRight, PencilLine, Star } from 'lucide-react';
 import DiaryModal from '@/components/DiaryModal';
-import { findRecordForDate, formatDiaryDate, useFanDiaryRecords } from '@/lib/fanDiary';
-import { findAttendanceRecord, useAttendanceRecords } from '@/lib/attendance';
+import TeamLogo from '@/components/TeamLogo';
 import { Team } from '@/data/teams';
+import { useTeam } from '@/context/TeamContext';
+import { findAttendanceRecord, useAttendanceRecords } from '@/lib/attendance';
+import { findRecordForDate, formatDiaryDate, useFanDiaryRecords } from '@/lib/fanDiary';
+import { KboMatch, TEAM_NAME_TO_ID } from '@/lib/kboScraper';
+import { useGameScheduleMonth } from '@/hooks/useGameScheduleMonth';
 import { TeamStats, useTeamStats } from '@/hooks/useTeamStats';
 
 function hexToRgb(hex: string) {
   const normalized = hex.replace('#', '');
-  const value = Number.parseInt(normalized.length === 3
-    ? normalized.split('').map((char) => char + char).join('')
-    : normalized, 16);
+  const value = Number.parseInt(
+    normalized.length === 3 ? normalized.split('').map((char) => char + char).join('') : normalized,
+    16
+  );
 
   return {
     r: (value >> 16) & 255,
     g: (value >> 8) & 255,
     b: value & 255,
   };
-}
-
-function getTeamStatsTheme(team: Team) {
-  const rgb = hexToRgb(team.color);
-  const main = team.color;
-
-  return {
-    main,
-    icon: main,
-    appBg: team.bgSecondary,
-    border: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.20)`,
-    badgeText: main,
-    badgeBorder: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.28)`,
-    glow: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.3)`,
-  };
-}
-
-function TeamStatsBanner({ team, stats, loading, error }: {
-  team: Team;
-  stats: TeamStats | null;
-  loading: boolean;
-  error: string | null;
-}) {
-  const theme = getTeamStatsTheme(team);
-  const currentWinRate = stats?.currentWinRate ?? '-';
-  const previousWinRate = stats?.previousWinRate ?? '-';
-  const rank = stats?.rank ?? null;
-  const deltaLabel = stats?.winRateDeltaLabel ?? '▲ 0.000';
-  const deltaColor = (stats?.winRateDelta ?? 0) >= 0 ? '#22c55e' : '#ef4444';
-  const badgeText = stats?.isPostseasonZone ? '포스트시즌 진출권' : '포스트시즌 추격권';
-
-  return (
-    <section
-      style={{
-        marginBottom: '24px',
-        transition: 'background-color 500ms ease',
-      }}
-    >
-        <h3
-          style={{
-            fontSize: '18px',
-            lineHeight: 1.3,
-            fontWeight: 800,
-            color: '#1f2937',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            marginBottom: '12px',
-            transition: 'color 300ms ease',
-          }}
-        >
-          <TrendingUp size={20} color={theme.icon} />
-          우리 팀 성적
-        </h3>
-
-        <div
-          className="card"
-          style={{
-            margin: 0,
-            background: '#fff',
-            border: `1.5px solid ${theme.border}`,
-            borderRadius: 'var(--radius)',
-            boxShadow: '0 6px 16px rgba(15, 23, 42, 0.04)',
-            display: 'grid',
-            gridTemplateColumns: '1fr 2px 1fr',
-            alignItems: 'center',
-            padding: '18px 16px',
-            marginBottom: '12px',
-            transition: 'border-color 300ms ease',
-          }}
-        >
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '15px', color: '#6b7280', fontWeight: 800, marginBottom: '6px' }}>
-              현재 승률
-            </div>
-            <div style={{ fontSize: '2rem', lineHeight: 1, fontWeight: 950, color: theme.main }}>
-              {loading ? '-' : currentWinRate}
-            </div>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '3px',
-                fontSize: '12px',
-                color: deltaColor,
-                fontWeight: 900,
-                marginTop: '8px',
-              }}
-            >
-              <ArrowUp size={13} />
-              {loading ? '0.000' : deltaLabel.replace('▲ ', '').replace('▼ ', '')}
-            </div>
-          </div>
-
-          <div style={{ width: '1px', height: '64px', background: theme.border }} />
-
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '15px', color: '#6b7280', fontWeight: 800, marginBottom: '6px' }}>
-              작년 이맘때
-            </div>
-            <div style={{ fontSize: '2rem', lineHeight: 1, fontWeight: 950, color: '#6b7280' }}>
-              {loading ? '-' : previousWinRate}
-            </div>
-            <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 800, marginTop: '8px' }}>
-              {stats?.previousRank ? `리그 ${stats.previousRank}위` : '순위 정보 없음'}
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="card"
-          style={{
-            margin: 0,
-            background: '#fff',
-            border: `1.5px solid ${theme.border}`,
-            borderRadius: 'var(--radius)',
-            boxShadow: '0 6px 16px rgba(15, 23, 42, 0.04)',
-            padding: '20px 18px',
-            textAlign: 'center',
-            transition: 'border-color 300ms ease',
-          }}
-        >
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '7px',
-              color: '#6b7280',
-              fontSize: '15px',
-              fontWeight: 900,
-              marginBottom: '8px',
-            }}
-          >
-            <Trophy size={18} color={theme.icon} />
-            현재 정규리그 순위
-          </div>
-          <div style={{ fontSize: '2rem', lineHeight: 1, fontWeight: 950, color: theme.main }}>
-            {loading ? '-' : rank ? `${rank}위` : '-'}
-          </div>
-
-          <div style={{ position: 'relative', display: 'inline-flex', marginTop: '14px' }}>
-            <div
-              style={{
-                position: 'absolute',
-                inset: '-7px',
-                background: theme.glow,
-                filter: 'blur(12px)',
-                borderRadius: '9999px',
-              }}
-            />
-            <div
-              style={{
-                position: 'relative',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 13px',
-                borderRadius: '9999px',
-                color: theme.badgeText,
-                border: `1.5px solid ${theme.badgeBorder}`,
-                background: '#fff',
-                fontSize: '13px',
-                fontWeight: 900,
-              }}
-            >
-              <Sparkles size={15} color={theme.icon} className="animate-pulse" />
-              {error ? '성적 확인 중' : badgeText}
-            </div>
-          </div>
-        </div>
-    </section>
-  );
 }
 
 function getDiaryGameSummary(recordDate: string, matches: KboMatch[], team: Team) {
@@ -226,21 +52,438 @@ function getDiaryGameSummary(recordDate: string, matches: KboMatch[], team: Team
   };
 }
 
-interface QuickLink {
-  name: string;
+function getTrendMeta(stats: TeamStats | null) {
+  if (!stats) {
+    return {
+      label: '비교 데이터 없음',
+      color: '#8B95A1',
+      icon: null as 'up' | 'down' | null,
+    };
+  }
+
+  if (stats.winRateDelta > 0) {
+    return {
+      label: `작년보다 ${stats.winRateDeltaLabel.replace('▲ ', '')} 상승`,
+      color: '#E11D48',
+      icon: 'up' as const,
+    };
+  }
+
+  if (stats.winRateDelta < 0) {
+    return {
+      label: `작년보다 ${stats.winRateDeltaLabel.replace('▼ ', '')} 하락`,
+      color: '#2563EB',
+      icon: 'down' as const,
+    };
+  }
+
+  return {
+    label: '작년과 동일',
+    color: '#8B95A1',
+    icon: null,
+  };
+}
+
+function formatDiaryCardPreview(review: string) {
+  const normalizedReview = review.trim();
+  const [firstLine = '', ...restLines] = normalizedReview.split(/\r?\n/);
+  const hasMoreLines = restLines.some((line) => line.trim().length > 0);
+
+  return hasMoreLines ? `${firstLine.trimEnd()}...` : firstLine;
+}
+
+function TeamStatsDashboard({
+  team,
+  stats,
+  loading,
+  error,
+}: {
+  team: Team;
+  stats: TeamStats | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  const rgb = hexToRgb(team.color);
+  const softBorder = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.18)`;
+  const trend = getTrendMeta(stats);
+
+  return (
+    <section style={{ marginBottom: '28px' }}>
+      <div
+        style={{
+          background: '#FFFFFF',
+          borderRadius: '24px',
+          padding: '24px 20px',
+          boxShadow: '0 12px 28px rgba(15, 23, 42, 0.05)',
+          border: `1px solid ${softBorder}`,
+          position: 'relative',
+        }}
+      >
+        <div style={{ position: 'relative' }}>
+          <div
+            style={{
+              fontSize: '14px',
+              fontWeight: 700,
+              color: '#8B95A1',
+              marginBottom: '8px',
+            }}
+          >
+            내 팀 성적
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-end',
+              gap: '8px',
+              flexWrap: 'wrap',
+              fontWeight: 900,
+              letterSpacing: '-0.03em',
+              marginBottom: '18px',
+            }}
+          >
+            <span style={{ fontSize: '18px', lineHeight: 1.2, color: '#4E5968' }}>{team.fullName}</span>
+            <span style={{ color: team.color, fontSize: '38px', lineHeight: 0.9 }}>{loading ? '-' : stats?.rank ?? '-'}</span>
+            <span style={{ fontSize: '20px', lineHeight: 1, color: '#191F28' }}>위</span>
+          </div>
+
+          <div style={{ height: '1px', background: '#EEF2F6', marginBottom: '18px' }} />
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+              gap: '14px',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#8B95A1', marginBottom: '6px' }}>
+                시즌 승률
+              </div>
+              <div style={{ fontSize: '26px', lineHeight: 1, fontWeight: 900, color: '#191F28', marginBottom: '8px' }}>
+                {loading ? '-' : stats?.currentWinRate ?? '-'}
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#6B7684' }}>
+                {error ? '성적을 불러오는 중 문제가 있어요.' : `${stats?.win ?? 0}승 ${stats?.loss ?? 0}패 ${stats?.draw ?? 0}무`}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#8B95A1', marginBottom: '6px' }}>
+                작년 이맘때 대비
+              </div>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '21px',
+                  lineHeight: 1,
+                  fontWeight: 900,
+                  color: trend.color,
+                  marginBottom: '8px',
+                }}
+              >
+                {trend.icon === 'up' ? <ArrowUp size={20} /> : null}
+                {trend.icon === 'down' ? <ArrowDown size={20} /> : null}
+                <span>{loading ? '-' : stats?.winRateDeltaLabel.replace(/[▲▼]\s*/, '') ?? '-'}</span>
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: trend.color }}>{trend.label}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type DiaryCardData = {
+  date: string;
+  venue: string;
+  review: string;
+  result: string;
+  rating: number;
+  opponent: string | null;
+  scoreLabel: string | null;
+  attendanceLabel: '직관' | '중계';
+};
+
+function DiaryCarousel({
+  team,
+  items,
+  onWrite,
+  onOpen,
+}: {
+  team: Team;
+  items: DiaryCardData[];
+  onWrite: () => void;
+  onOpen: (dateText: string) => void;
+}) {
+  return (
+    <section style={{ marginBottom: '28px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+        <h3 style={{ fontSize: '18px', lineHeight: 1.25, color: '#191F28' }}>나의 야구 일기</h3>
+        <button
+          onClick={onWrite}
+          style={{
+            color: '#9AA4AF',
+            fontSize: '12px',
+            fontWeight: 800,
+            padding: '4px 0',
+          }}
+        >
+          전체보기
+        </button>
+      </div>
+
+      <div
+        style={{
+          background: '#FFFFFF',
+          borderRadius: '28px',
+          padding: '18px',
+          boxShadow: '0 12px 28px rgba(15, 23, 42, 0.05)',
+          overflow: 'hidden',
+        }}
+      >
+        {items.length ? (
+          <div
+            className="hide-scrollbar"
+            style={{
+              display: 'grid',
+              gridAutoFlow: 'column',
+              gridAutoColumns: '76%',
+              gap: '14px',
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              scrollSnapType: 'x proximity',
+              touchAction: 'pan-x',
+              overscrollBehaviorX: 'contain',
+              paddingBottom: '6px',
+              marginRight: '-18px',
+              paddingRight: '18px',
+            }}
+          >
+            {items.map((item) => (
+              <div
+                key={item.date}
+                role="button"
+                tabIndex={0}
+                onClick={() => onOpen(item.date)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onOpen(item.date);
+                  }
+                }}
+                style={{
+                  scrollSnapAlign: 'start',
+                  background: '#F6F8FB',
+                  borderRadius: '26px',
+                  padding: '18px',
+                  border: '1px solid #E8EDF3',
+                  textAlign: 'left',
+                  minWidth: '0',
+                  maxWidth: '320px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '18px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    <span
+                      style={{
+                        borderRadius: '12px',
+                        minWidth: '52px',
+                        padding: '9px 12px',
+                        fontSize: '12px',
+                        lineHeight: 1,
+                        textAlign: 'center',
+                        fontWeight: 900,
+                        background: item.result === 'W' ? '#3B82F6' : item.result === 'L' ? '#EF4444' : '#6B7684',
+                        color: '#FFFFFF',
+                      }}
+                    >
+                      {item.result === 'W' ? '승' : item.result === 'L' ? '패' : '무'}
+                    </span>
+                    <span
+                      style={{
+                        borderRadius: '12px',
+                        padding: '9px 12px',
+                        fontSize: '12px',
+                        lineHeight: 1,
+                        fontWeight: 800,
+                        background: '#ECEFF3',
+                        color: '#4E5968',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <span style={{ fontSize: '13px' }}>{item.attendanceLabel === '직관' ? '🏟️' : '📺'}</span>
+                      {item.attendanceLabel}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '13px',
+                      fontWeight: 900,
+                      color: '#4E5968',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Star size={15} fill="#FFC83D" color="#FFC83D" />
+                    {item.rating.toFixed(1)}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 900, color: '#191F28' }}>
+                    {item.opponent ? `vs ${item.opponent}` : `${team.name} 경기`}
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: 800, color: '#9AA4AF' }}>
+                    {item.date.split('.').slice(-2).join('월 ')}일
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    fontSize: '14px',
+                    lineHeight: 1.45,
+                    fontWeight: 700,
+                    color: '#4E5968',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    width: '100%',
+                  }}
+                >
+                  {formatDiaryCardPreview(item.review)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            style={{
+              minHeight: '124px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              padding: '8px',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '18px',
+                fontWeight: 900,
+                color: '#191F28',
+              }}
+            >
+                아직 작성한 야구일기가 없어요
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={onWrite}
+          style={{
+            width: '100%',
+            marginTop: '16px',
+            borderRadius: '22px',
+            background: '#EEF2F6',
+            color: '#4E5968',
+            padding: '18px 20px',
+            fontSize: '14px',
+            fontWeight: 900,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px',
+          }}
+        >
+          <PencilLine size={22} />
+          새 야구 일기 쓰기
+        </button>
+      </div>
+    </section>
+  );
+}
+
+type QuickLinkItem = {
+  label: string;
   description: string;
   url: string;
-  background: string;
-  textColor: string;
-  borderColor: string;
-  iconColor: string;
-  featured: boolean;
-  accentColor: string;
-  logoSurface: string;
-  descriptionColor: string;
-  badgeText?: string;
-  logoPath?: string;
-  logoAlt?: string;
+  emoji: string;
+};
+
+function QuickLinksSection({
+  ticketLinks,
+  serviceLinks,
+}: {
+  ticketLinks: QuickLinkItem[];
+  serviceLinks: QuickLinkItem[];
+}) {
+  const renderItem = (item: QuickLinkItem) => (
+    <a
+      key={item.label}
+      href={item.url}
+      target="_blank"
+      rel="noreferrer"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        background: '#FFFFFF',
+        borderRadius: '20px',
+        padding: '16px 18px',
+        boxShadow: '0 10px 24px rgba(15, 23, 42, 0.04)',
+        border: '1px solid rgba(139, 149, 161, 0.1)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+        <div
+          style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '14px',
+            background: '#F2F4F6',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '16px',
+            flexShrink: 0,
+          }}
+        >
+          {item.emoji}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: '15px', fontWeight: 800, color: '#191F28', marginBottom: '2px' }}>{item.label}</div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: '#8B95A1' }}>{item.description}</div>
+        </div>
+      </div>
+      <ChevronRight size={18} color="#9AA4AF" />
+    </a>
+  );
+
+  return (
+    <section>
+      <h3 style={{ fontSize: '18px', lineHeight: 1.25, color: '#191F28', marginBottom: '14px' }}>바로가기</h3>
+
+      <div style={{ marginBottom: '18px' }}>
+        <div style={{ fontSize: '13px', fontWeight: 800, color: '#8B95A1', marginBottom: '10px' }}>티켓 예매</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>{ticketLinks.map(renderItem)}</div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: '13px', fontWeight: 800, color: '#8B95A1', marginBottom: '10px' }}>팬 서비스</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>{serviceLinks.map(renderItem)}</div>
+      </div>
+    </section>
+  );
 }
 
 export default function ProfilePage() {
@@ -250,77 +493,55 @@ export default function ProfilePage() {
   const currentYear = new Date().getFullYear();
   const today = new Date();
   const { schedules } = useGameScheduleMonth(today.getFullYear(), today.getMonth() + 1);
-  const { stats: teamStats, loading: teamStatsLoading, error: teamStatsError } = useTeamStats(
-    myTeam?.id,
-    currentYear
-  );
+  const { stats: teamStats, loading: teamStatsLoading, error: teamStatsError } = useTeamStats(myTeam?.id, currentYear);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDiaryDate, setSelectedDiaryDate] = useState('');
 
-  const ticketingSites = [
-    { name: '인터파크 티켓', url: 'https://ticket.interpark.com' },
-    { name: '티켓링크', url: 'https://www.ticketlink.co.kr' },
-  ];
+  const finishedGames = (myTeam
+    ? schedules.filter(
+    (game) =>
+      game.status === 'finished' &&
+      (TEAM_NAME_TO_ID[game.homeTeam] === myTeam.id || TEAM_NAME_TO_ID[game.awayTeam] === myTeam.id)
+    )
+    : []) as typeof schedules;
+
+  const history = records
+    .filter((record) => record.teamId === myTeam?.id && record.review.trim())
+    .sort((left, right) => right.date.localeCompare(left.date));
+
+  const diaryItems = useMemo<DiaryCardData[]>(
+    () =>
+      !myTeam
+        ? []
+        : history.slice(0, 5).map((record) => {
+        const attendanceRecord = findAttendanceRecord(attendanceRecords, myTeam.id, record.date);
+        const gameSummary = getDiaryGameSummary(record.date, schedules, myTeam);
+
+        let scoreLabel: string | null = null;
+        if (gameSummary) {
+          if (gameSummary.hasScore) {
+            scoreLabel = `${myTeam.name} ${gameSummary.myScore} : ${gameSummary.opponentScore} ${gameSummary.opponent}`;
+          } else {
+            scoreLabel = gameSummary.status === 'cancelled' ? '경기 취소' : '스코어 미정';
+          }
+        }
+
+        return {
+          date: record.date,
+          venue: record.venue,
+          review: record.review,
+          result: record.result,
+          rating: record.rating,
+          opponent: gameSummary?.opponent ?? null,
+          scoreLabel,
+          attendanceLabel: attendanceRecord?.isAttending ? '직관' : '중계',
+        };
+      }),
+    [attendanceRecords, history, myTeam, schedules]
+  );
 
   if (!myTeam) return null;
-
-  const quickLinks: QuickLink[] = [
-    {
-      name: `${myTeam.name} 공식 온라인 샵`,
-      description: '유니폼, 모자, 응원용품 보러가기',
-      url: 'https://landers.family.ssg.com/',
-      background: '#FFFFFF',
-      textColor: 'var(--text)',
-      borderColor: `${myTeam.color}33`,
-      iconColor: myTeam.color,
-      featured: true,
-      badgeText: myTeam.name,
-      accentColor: myTeam.color,
-      logoSurface: myTeam.color,
-      descriptionColor: 'var(--text-light)',
-    },
-    {
-      name: '네이버 스포츠 바로가기',
-      description: '빠르게 경기 일정과 기록 확인',
-      url: 'https://m.sports.naver.com/index',
-      background: '#FFFFFF',
-      textColor: 'var(--text)',
-      borderColor: '#BBF7D0',
-      iconColor: '#16A34A',
-      featured: false,
-      logoPath: '/brand-logos/naver-sports.svg',
-      logoAlt: '네이버 스포츠 로고',
-      accentColor: '#16A34A',
-      logoSurface: '#F6FFF8',
-      descriptionColor: 'var(--text-light)',
-    },
-    {
-      name: '티빙으로 중계보기',
-      description: '실시간 중계 화면으로 바로 이동',
-      url: 'https://www.tving.com/sports/kbo',
-      background: '#FFFFFF',
-      textColor: 'var(--text)',
-      borderColor: '#FECACA',
-      iconColor: '#E11D48',
-      featured: false,
-      logoPath: '/brand-logos/tving.jpg',
-      logoAlt: '티빙 로고',
-      accentColor: '#E11D48',
-      logoSurface: '#FFF5F5',
-      descriptionColor: 'var(--text-light)',
-    },
-  ];
-
-  // 종료된 내 팀 경기 찾기
-  const finishedGames = schedules.filter(
-    (m) =>
-      m.status === 'finished' &&
-      (TEAM_NAME_TO_ID[m.homeTeam] === myTeam.id || TEAM_NAME_TO_ID[m.awayTeam] === myTeam.id)
-  );
-  const history = records
-    .filter((record) => record.teamId === myTeam.id && record.review.trim())
-    .sort((left, right) => right.date.localeCompare(left.date));
 
   const handleDateChange = (dateStr: string) => {
     setSelectedDiaryDate(dateStr);
@@ -339,7 +560,7 @@ export default function ProfilePage() {
     setIsModalOpen(true);
   };
 
-  const selectedGame = finishedGames.find(g => g.date === selectedDiaryDate);
+  const selectedGame = finishedGames.find((game) => game.date === selectedDiaryDate);
   const selectedRecord = findRecordForDate(records, myTeam.id, formatDiaryDate(currentYear, selectedDiaryDate));
   const selectedAttendanceRecord = findAttendanceRecord(
     attendanceRecords,
@@ -347,275 +568,114 @@ export default function ProfilePage() {
     formatDiaryDate(currentYear, selectedDiaryDate)
   );
 
+  const avatarLabel = myTeam.name.length <= 2 ? myTeam.name : myTeam.name.slice(0, 2);
+
+  const ticketLinks: QuickLinkItem[] = [
+    {
+      label: '인터파크 티켓',
+      description: '빠르게 경기 예매하러 가기',
+      url: 'https://ticket.interpark.com',
+      emoji: '🎟️',
+    },
+    {
+      label: '티켓링크',
+      description: '좌석 예매 가능한지 바로 확인',
+      url: 'https://www.ticketlink.co.kr',
+      emoji: '📱',
+    },
+  ];
+
+  const teamShopById: Record<string, string> = {
+    ssg: 'https://landers.family.ssg.com/',
+  };
+
+  const serviceLinks: QuickLinkItem[] = [
+    {
+      label: `${myTeam.fullName} 굿즈샵`,
+      description: '유니폼, 모자, 응원용품 보러가기',
+      url: teamShopById[myTeam.id] ?? 'https://m.sports.naver.com/index',
+      emoji: '🛍️',
+    },
+    {
+      label: '네이버 스포츠',
+      description: '경기 일정과 기록 빠르게 확인',
+      url: 'https://m.sports.naver.com/index',
+      emoji: '📊',
+    },
+    {
+      label: '티빙 중계 보기',
+      description: '실시간 중계 화면으로 바로 이동',
+      url: 'https://www.tving.com/sports/kbo',
+      emoji: '📺',
+    },
+  ];
+
   return (
-    <div className="container" style={{ position: 'relative' }}>
-      <header style={{ textAlign: 'center', marginBottom: '32px' }}>
-        <div style={{ 
-          background: myTeam.bgSecondary, 
-          width: '100px', 
-          height: '100px', 
-          borderRadius: '50%', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          margin: '0 auto 16px' 
-        }}>
-          <TeamLogo team={myTeam} size={64} rounded />
-        </div>
-        <h2 style={{ fontSize: '24px' }}>{myTeam.fullName} 야덕</h2>
-        <p style={{ color: 'var(--text-light)', fontSize: '14px' }}>오늘도 야구볼래? 👋</p>
-        <div style={{ marginTop: '10px' }}>
+    <div className="container" style={{ background: '#F2F4F6', minHeight: '100vh' }}>
+      <header style={{ marginBottom: '28px' }}>
+        <div
+          style={{
+            background: '#FFFFFF',
+            borderRadius: '28px',
+            padding: '22px 20px',
+            boxShadow: '0 12px 28px rgba(15, 23, 42, 0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '14px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+            <div
+              style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '22px',
+                background: myTeam.color,
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: `0 10px 24px ${myTeam.color}33`,
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ position: 'absolute', inset: '0', opacity: 0.16 }}>
+                <TeamLogo team={myTeam} size={64} rounded />
+              </div>
+              <span style={{ position: 'relative', fontSize: '18px', fontWeight: 900 }}>{avatarLabel}</span>
+            </div>
+
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#8B95A1', marginBottom: '4px' }}>{myTeam.fullName} 팬</div>
+              <div style={{ fontSize: '24px', lineHeight: 1.15, fontWeight: 900, color: '#191F28' }}>야구팬 님</div>
+            </div>
+          </div>
+
           <Link
             href="/teams"
             style={{
+              flexShrink: 0,
+              borderRadius: '999px',
+              background: '#F2F4F6',
+              color: '#4E5968',
+              padding: '10px 14px',
               fontSize: '13px',
-              color: 'var(--text-light)',
-              textDecoration: 'underline',
-              textUnderlineOffset: '3px',
+              fontWeight: 800,
             }}
           >
-            응원팀 변경하기
+            팀 변경
           </Link>
         </div>
       </header>
 
-      <TeamStatsBanner team={myTeam} stats={teamStats} loading={teamStatsLoading} error={teamStatsError} />
+      <TeamStatsDashboard team={myTeam} stats={teamStats} loading={teamStatsLoading} error={teamStatsError} />
 
-      {/* Ticketing Sites */}
-      <div style={{ marginBottom: '24px' }}>
-        <h3 style={{ fontSize: '18px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Ticket size={20} color="var(--primary)" /> 예매 사이트
-        </h3>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          {ticketingSites.map((site) => (
-            <a 
-              key={site.name}
-              href={site.url} 
-              target="_blank" 
-              className="card" 
-              style={{ flex: 1, margin: 0, padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: 'bold' }}
-            >
-              {site.name}
-            </a>
-          ))}
-        </div>
-      </div>
+      <DiaryCarousel team={myTeam} items={diaryItems} onWrite={openModal} onOpen={openEditModal} />
 
-      {/* Attendance History */}
-      <div style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h3 style={{ fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <History size={20} color="var(--primary)" /> 야구 일기
-          </h3>
-          <button onClick={openModal} style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '14px' }}>+ 작성하기</button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {history.map((record, i) => (
-            (() => {
-              const attendanceRecord = findAttendanceRecord(attendanceRecords, myTeam.id, record.date);
-              const attendanceLabel = attendanceRecord?.isAttending ? '직관' : '중계';
-              const gameSummary = getDiaryGameSummary(record.date, schedules, myTeam);
-
-              return (
-            <motion.div 
-              key={i} 
-              className="card" 
-              onClick={() => openEditModal(record.date)}
-              style={{
-                margin: 0,
-                padding: '16px',
-                borderLeft: `6px solid ${record.result === 'W' ? 'var(--success)' : record.result === 'L' ? 'var(--error)' : 'var(--border)'}`,
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-light)' }}>{record.date} @{record.venue}</span>
-              </div>
-              {gameSummary && (
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    maxWidth: '100%',
-                    color: 'var(--text-light)',
-                    fontSize: '12px',
-                    fontWeight: 800,
-                    marginBottom: '7px',
-                  }}
-                >
-                  <span
-                    style={{
-                      color: 'var(--text)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {myTeam.name}
-                  </span>
-                  {gameSummary.hasScore ? (
-                    <span style={{ color: myTeam.color, fontWeight: 950, whiteSpace: 'nowrap' }}>
-                      {gameSummary.myScore} : {gameSummary.opponentScore}
-                    </span>
-                  ) : (
-                    <span style={{ color: myTeam.color, fontWeight: 950, whiteSpace: 'nowrap' }}>
-                      {gameSummary.status === 'cancelled' ? '경기 취소' : '스코어 미정'}
-                    </span>
-                  )}
-                  <span
-                    style={{
-                      color: 'var(--text)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {gameSummary.opponent}
-                  </span>
-                  <span
-                    style={{
-                      padding: '2px 7px',
-                      borderRadius: '9999px',
-                      background: 'var(--background)',
-                      color: 'var(--text-light)',
-                      fontSize: '10px',
-                      fontWeight: 900,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {attendanceLabel}
-                  </span>
-                </div>
-              )}
-              <p style={{ fontSize: '14px', marginBottom: '8px' }}>{record.review}</p>
-              <div style={{ display: 'flex', gap: '2px' }}>
-                {[...Array(5)].map((_, j) => (
-                  <Star key={j} size={14} fill={j < record.rating ? 'var(--accent)' : 'none'} color={j < record.rating ? 'var(--accent)' : 'var(--border)'} />
-                ))}
-              </div>
-            </motion.div>
-              );
-            })()
-          ))}
-        </div>
-      </div>
-
-      {/* Quick Links */}
-      <div style={{ marginBottom: '24px' }}>
-        <h3 style={{ fontSize: '18px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <ShoppingBag size={20} color="var(--primary)" /> 바로가기
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {quickLinks.map((link) => (
-            <a
-              key={link.name}
-              href={link.url}
-              target="_blank"
-              rel="noreferrer"
-              className="card"
-              style={{
-                margin: 0,
-                padding: link.featured ? '18px' : '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: link.background,
-                color: link.textColor,
-                borderColor: link.borderColor,
-                borderWidth: '1.5px',
-                boxShadow: link.featured ? '0 12px 24px rgba(15, 23, 42, 0.06)' : '0 6px 16px rgba(15, 23, 42, 0.04)',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: `linear-gradient(90deg, ${link.accentColor}10 0%, rgba(255,255,255,0) 45%)`,
-                  pointerEvents: 'none',
-                }}
-              />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div
-                  style={{
-                    width: link.featured ? '58px' : '72px',
-                    height: link.featured ? '48px' : '42px',
-                    borderRadius: '14px',
-                    background: link.logoSurface,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '6px 10px',
-                    flexShrink: 0,
-                    overflow: 'hidden',
-                    border: `1px solid ${link.borderColor}`,
-                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9)',
-                    position: 'relative',
-                    zIndex: 1,
-                  }}
-                >
-                  {link.logoPath ? (
-                    <Image
-                      src={link.logoPath}
-                      alt={link.logoAlt ?? link.name}
-                      width={link.featured ? 58 : 72}
-                      height={link.featured ? 48 : 42}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'contain',
-                        display: 'block',
-                      }}
-                    />
-                  ) : (
-                    <span
-                      style={{
-                        fontSize: link.featured ? '15px' : '14px',
-                        fontWeight: 900,
-                        color: '#FFFFFF',
-                        letterSpacing: '-0.02em',
-                      }}
-                    >
-                      {link.badgeText}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <div style={{ fontSize: link.featured ? '16px' : '15px', fontWeight: 800 }}>
-                    {link.name}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '12px',
-                      color: link.descriptionColor,
-                      marginTop: '2px',
-                    }}
-                  >
-                    {link.description}
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  width: link.featured ? '38px' : '34px',
-                  height: link.featured ? '38px' : '34px',
-                  borderRadius: '9999px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: `${link.accentColor}12`,
-                  border: `1px solid ${link.accentColor}22`,
-                  position: 'relative',
-                  zIndex: 1,
-                }}
-              >
-                <ExternalLink size={link.featured ? 20 : 18} color={link.iconColor} />
-              </div>
-            </a>
-          ))}
-        </div>
-      </div>
+      <QuickLinksSection ticketLinks={ticketLinks} serviceLinks={serviceLinks} />
 
       <DiaryModal
         isOpen={isModalOpen}

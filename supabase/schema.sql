@@ -45,7 +45,7 @@ create table if not exists public.game_histories (
   stadium text not null default '',
   home_score integer,
   away_score integer,
-  status text not null default 'scheduled' check (status in ('scheduled', 'finished', 'cancelled')),
+  status text not null check (status in ('finished', 'cancelled')),
   note text not null default '',
   winning_pitcher_name text,
   losing_pitcher_name text,

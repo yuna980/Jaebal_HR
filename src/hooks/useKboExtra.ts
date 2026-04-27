@@ -41,37 +41,83 @@ export interface WeatherData {
   observedTime: string;
 }
 
+const lineupCache = new Map<string, LineupData | null>();
+const lineupRequestCache = new Map<string, Promise<LineupData | null>>();
+
+function getLineupRequestKey(teamId: string | undefined, date: string) {
+  return teamId && date ? `${teamId}-${date}` : 'none';
+}
+
+async function fetchLineupData(teamId: string, date: string) {
+  const requestKey = getLineupRequestKey(teamId, date);
+
+  if (lineupCache.has(requestKey)) {
+    return lineupCache.get(requestKey) ?? null;
+  }
+
+  const existingRequest = lineupRequestCache.get(requestKey);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = axios
+    .get(`/api/lineup?teamId=${teamId}&date=${date}`)
+    .then((res) => {
+      lineupCache.set(requestKey, res.data);
+      return res.data;
+    })
+    .catch((err) => {
+      console.error(err);
+      lineupCache.set(requestKey, null);
+      return null;
+    })
+    .finally(() => {
+      lineupRequestCache.delete(requestKey);
+    });
+
+  lineupRequestCache.set(requestKey, request);
+  return request;
+}
+
+export function prefetchLineup(teamId: string | undefined, date: string) {
+  if (!teamId || !date) return Promise.resolve(null);
+  return fetchLineupData(teamId, date);
+}
+
 export function useKboLineup(teamId: string | undefined, date: string) {
-  const [lineup, setLineup] = useState<LineupData | null>(null);
-  const [loading, setLoading] = useState(Boolean(teamId && date));
-  const [loadedKey, setLoadedKey] = useState('');
-  const requestKey = teamId && date ? `${teamId}-${date}` : 'none';
+  const requestKey = getLineupRequestKey(teamId, date);
+  const initialLineup = lineupCache.has(requestKey) ? (lineupCache.get(requestKey) ?? null) : null;
+  const [lineup, setLineup] = useState<LineupData | null>(initialLineup);
+  const [loadedKey, setLoadedKey] = useState(
+    !teamId || !date || lineupCache.has(requestKey) ? requestKey : ''
+  );
 
   useEffect(() => {
-    if (!teamId || !date) {
-      setLineup(null);
-      setLoading(false);
-      setLoadedKey('none');
+    if (!teamId || !date || lineupCache.has(requestKey)) {
       return;
     }
-    
-    const fetchLineup = async () => {
-      setLoading(true);
-      try {
-        const res = await axios.get(`/api/lineup?teamId=${teamId}&date=${date}`);
-        setLineup(res.data);
-      } catch (err) {
-        console.error(err);
-        setLineup(null);
-      } finally {
-        setLoading(false);
-        setLoadedKey(`${teamId}-${date}`);
-      }
-    };
-    fetchLineup();
-  }, [teamId, date]);
+    let cancelled = false;
 
-  return { lineup, loading, loaded: loadedKey === requestKey && !loading };
+    fetchLineupData(teamId, date).then((data) => {
+      if (cancelled) return;
+      setLineup(data);
+      setLoadedKey(requestKey);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [teamId, date, requestKey]);
+
+  if (!teamId || !date) {
+    return { lineup: null, loading: false, loaded: true };
+  }
+
+  const hasCache = lineupCache.has(requestKey);
+  const effectiveLineup = hasCache ? (lineupCache.get(requestKey) ?? null) : loadedKey === requestKey ? lineup : null;
+  const loaded = hasCache || loadedKey === requestKey;
+
+  return { lineup: effectiveLineup, loading: !loaded, loaded };
 }
 
 export function useKboRoster(teamId: string | undefined) {

@@ -1,85 +1,139 @@
-'use client';
+import StadiumInfoPageClient from '@/components/StadiumInfoPageClient';
+import type {
+  StadiumDetail,
+  StadiumFoodVendor,
+  StadiumGoodsShop,
+  StadiumParkingLot,
+} from '@/lib/stadiumInfo';
+import { getSupabaseServerClient } from '@/lib/supabase/server';
 
-import { STADIUMS } from '@/data/stadiums';
-import { motion } from 'framer-motion';
-import { MapPin, Bus, Utensils, Search } from 'lucide-react';
-import { useState } from 'react';
+export const dynamic = 'force-dynamic';
 
-export default function StadiumsPage() {
-  const [searchTerm, setSearchTerm] = useState('');
+type StadiumRow = {
+  id: number;
+  stadium_name: string;
+  address: string;
+};
 
-  const filteredStadiums = STADIUMS.filter(s => 
-    s.name.includes(searchTerm) || s.location.includes(searchTerm)
-  );
+type ParkingRow = StadiumParkingLot & {
+  stadium_name: string;
+};
 
-  return (
-    <div className="container">
-      <header style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>구장별 맛도리 리스트 🍕</h2>
-        <p style={{ color: 'var(--text-light)', fontSize: '14px' }}>구장 주변 맛집과 교통 정보를 확인하세요!</p>
-      </header>
+type FoodRow = StadiumFoodVendor & {
+  stadium_name: string;
+};
 
-      <div style={{ position: 'relative', marginBottom: '24px' }}>
-        <input 
-          type="text" 
-          placeholder="구장 이름을 검색하세요" 
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+type GoodsRow = StadiumGoodsShop & {
+  stadium_name: string;
+};
+
+async function getStadiumDetails(): Promise<StadiumDetail[]> {
+  const supabase = getSupabaseServerClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  const [
+    { data: stadiumRows, error: stadiumError },
+    { data: parkingRows, error: parkingError },
+    { data: foodRows, error: foodError },
+    { data: goodsRows, error: goodsError },
+  ] = await Promise.all([
+    supabase.from('stadiums').select('id, stadium_name, address').order('id', { ascending: true }),
+    supabase
+      .from('stadium_parking_lots')
+      .select('id, stadium_name, parking_location, fee_description, note, display_order')
+      .order('display_order', { ascending: true }),
+    supabase
+      .from('stadium_food_vendors')
+      .select('id, stadium_name, vendor_name, main_menu, location_description, display_order')
+      .order('display_order', { ascending: true }),
+    supabase
+      .from('stadium_goods_shops')
+      .select('id, stadium_name, stadium_label, shop_location, opening_hours, display_order')
+      .order('display_order', { ascending: true }),
+  ]);
+
+  if (stadiumError || parkingError || foodError || goodsError) {
+    console.error(
+      '구장정보 페이지 DB 조회 실패:',
+      stadiumError?.message ?? parkingError?.message ?? foodError?.message ?? goodsError?.message
+    );
+    return [];
+  }
+
+  const parkingByStadium = new Map<string, StadiumParkingLot[]>();
+  const foodByStadium = new Map<string, StadiumFoodVendor[]>();
+  const goodsByStadium = new Map<string, StadiumGoodsShop[]>();
+
+  ((parkingRows ?? []) as ParkingRow[]).forEach((row) => {
+    const current = parkingByStadium.get(row.stadium_name) ?? [];
+    current.push({
+      id: row.id,
+      parking_location: row.parking_location,
+      fee_description: row.fee_description,
+      note: row.note,
+      display_order: row.display_order,
+    });
+    parkingByStadium.set(row.stadium_name, current);
+  });
+
+  ((foodRows ?? []) as FoodRow[]).forEach((row) => {
+    const current = foodByStadium.get(row.stadium_name) ?? [];
+    current.push({
+      id: row.id,
+      vendor_name: row.vendor_name,
+      main_menu: row.main_menu,
+      location_description: row.location_description,
+      display_order: row.display_order,
+    });
+    foodByStadium.set(row.stadium_name, current);
+  });
+
+  ((goodsRows ?? []) as GoodsRow[]).forEach((row) => {
+    const current = goodsByStadium.get(row.stadium_name) ?? [];
+    current.push({
+      id: row.id,
+      stadium_label: row.stadium_label,
+      shop_location: row.shop_location,
+      opening_hours: row.opening_hours,
+      display_order: row.display_order,
+    });
+    goodsByStadium.set(row.stadium_name, current);
+  });
+
+  return ((stadiumRows ?? []) as StadiumRow[]).map((stadium) => ({
+    id: stadium.id,
+    stadiumName: stadium.stadium_name,
+    address: stadium.address,
+    parkingLots: parkingByStadium.get(stadium.stadium_name) ?? [],
+    foodVendors: foodByStadium.get(stadium.stadium_name) ?? [],
+    goodsShops: goodsByStadium.get(stadium.stadium_name) ?? [],
+  }));
+}
+
+export default async function StadiumsPage() {
+  const stadiums = await getStadiumDetails();
+
+  if (!stadiums.length) {
+    return (
+      <div className="container">
+        <div
           style={{
-            width: '100%',
-            padding: '12px 16px',
-            paddingLeft: '44px',
-            borderRadius: 'var(--radius-full)',
-            border: '2px solid var(--border)',
-            fontSize: '14px',
-            outline: 'none'
+            background: '#FFFFFF',
+            borderRadius: '24px',
+            padding: '24px',
+            textAlign: 'center',
+            color: 'var(--text-light)',
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
           }}
-        />
-        <Search size={20} color="var(--text-light)" style={{ position: 'absolute', left: '16px', top: '12px' }} />
-      </div>
-
-      {filteredStadiums.map((stadium, idx) => (
-        <motion.div 
-          key={stadium.id}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: idx * 0.1 }}
-          className="card"
-          style={{ marginBottom: '20px' }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <MapPin size={20} color="var(--primary)" />
-            <h3 style={{ fontSize: '18px' }}>{stadium.name}</h3>
-          </div>
+          😢 구장 정보를 아직 불러오지 못했어요.
+        </div>
+      </div>
+    );
+  }
 
-          <div style={{ background: 'var(--background)', padding: '12px', borderRadius: 'var(--radius-sm)', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <Bus size={16} color="var(--text-light)" />
-              <span style={{ fontSize: '13px', fontWeight: 'bold' }}>대중교통</span>
-            </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-light)', marginLeft: '24px' }}>
-              {stadium.transport.metro} {stadium.transport.bus}
-            </p>
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <Utensils size={16} color="var(--text-light)" />
-              <span style={{ fontSize: '13px', fontWeight: 'bold' }}>맛도리 추천</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {stadium.restaurants.map((rest, i) => (
-                <div key={i} style={{ padding: '4px 0', borderBottom: i === stadium.restaurants.length - 1 ? 'none' : '1px dashed var(--border)' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '2px' }}>
-                    {rest.name} <span style={{ color: 'var(--primary)', fontSize: '10px', background: 'var(--border)', padding: '2px 6px', borderRadius: '10px' }}>{rest.menu}</span>
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-light)' }}>{rest.description}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </motion.div>
-      ))}
-    </div>
-  );
+  return <StadiumInfoPageClient stadiums={stadiums} />;
 }

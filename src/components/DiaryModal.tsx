@@ -272,9 +272,10 @@ export default function DiaryModal({
             background: 'rgba(0,0,0,0.6)',
             zIndex: 10000,
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
-            padding: '20px',
+            overflowY: 'auto',
+            padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px calc(env(safe-area-inset-bottom, 0px) + 12px)',
           }}
           onClick={onClose}
         >
@@ -287,13 +288,29 @@ export default function DiaryModal({
               background: 'var(--card)',
               width: '100%',
               maxWidth: '400px',
+              maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
               borderRadius: '24px',
-              padding: '24px',
+              overflow: 'hidden',
               boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+              margin: '0 auto',
             }}
             onClick={(event) => event.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '24px 24px 18px',
+                background: 'var(--card)',
+                borderBottom: '1px solid rgba(226, 232, 240, 0.9)',
+              }}
+            >
               <h3 style={{ fontSize: '20px' }}>
                 {currentRecord?.review ? '야구 일기 수정' : '야구 일기 쓰기'}
               </h3>
@@ -302,18 +319,20 @@ export default function DiaryModal({
               </button>
             </div>
 
-            <DiaryModalForm
-              key={`form-${selectedDate}-${currentRecord?.review ?? ''}-${currentRecord?.rating ?? 0}-${attendanceLabel}`}
-              onClose={onClose}
-              myTeamId={myTeamId}
-              selectedGame={selectedGame}
-              selectedDate={selectedDate}
-              onDateChange={onDateChange}
-              finishedGames={finishedGames}
-              currentRecord={currentRecord}
-              attendanceLabel={attendanceLabel}
-              year={year}
-            />
+            <div style={{ overflowY: 'auto', padding: '20px 24px 24px' }}>
+              <DiaryModalForm
+                key={`form-${selectedDate}-${currentRecord?.review ?? ''}-${currentRecord?.rating ?? 0}-${attendanceLabel}`}
+                onClose={onClose}
+                myTeamId={myTeamId}
+                selectedGame={selectedGame}
+                selectedDate={selectedDate}
+                onDateChange={onDateChange}
+                finishedGames={finishedGames}
+                currentRecord={currentRecord}
+                attendanceLabel={attendanceLabel}
+                year={year}
+              />
+            </div>
           </motion.div>
         </motion.div>
       )}
