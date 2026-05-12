@@ -14,7 +14,7 @@ type MonthScheduleCacheEntry = {
   savedAt: number;
 };
 
-const MONTH_SCHEDULE_CACHE_KEY = 'game-schedule-month-cache';
+const MONTH_SCHEDULE_CACHE_KEY = 'game-schedule-month-cache-v4';
 const MONTH_SCHEDULE_CACHE_TTL_MS = 5 * 60 * 1000;
 const memoryCache = new Map<string, MonthScheduleCacheEntry>();
 const inflightRequests = new Map<string, Promise<KboMatch[]>>();

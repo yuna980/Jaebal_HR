@@ -14,7 +14,7 @@ export default function BottomNav() {
     { name: '마이', href: '/profile', icon: User },
   ];
 
-  if (pathname === '/') return null;
+  if (pathname === '/' || pathname === '/teams' || pathname.startsWith('/login') || pathname.startsWith('/signup') || pathname.startsWith('/auth')) return null;
 
   return (
     <nav className="bottom-nav">

@@ -21,6 +21,10 @@ function toDashboardDate(gameDate: string) {
   return month && day ? `${month}.${day}` : gameDate;
 }
 
+function isPastDate(date: string) {
+  return date < getKstToday();
+}
+
 export async function GET(request: Request) {
   const rateLimit = checkRateLimit(request, 'game-schedules-today');
   if (!rateLimit.allowed) {
@@ -68,12 +72,41 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, schedule: null });
   }
 
+  const { data: history, error: historyError } = await supabase
+    .from('game_histories')
+    .select('home_score, away_score, status, note, winning_pitcher_name, losing_pitcher_name')
+    .eq('season_year', data.season_year)
+    .eq('game_date', data.game_date)
+    .eq('home_team_id', data.home_team_id)
+    .eq('away_team_id', data.away_team_id)
+    .maybeSingle();
+
+  if (historyError) {
+    console.error('오늘 경기 결과 조회 실패:', historyError);
+    return NextResponse.json(
+      { success: false, schedule: null, message: '오늘 경기 결과를 가져오지 못했습니다.' },
+      { status: 500 }
+    );
+  }
+
   const awayTeam = TEAM_BY_ID[data.away_team_id] ?? data.away_team_id;
   const homeTeam = TEAM_BY_ID[data.home_team_id] ?? data.home_team_id;
   const gameDate = String(data.game_date);
+  const note = history?.note && history.note !== '-' ? history.note : data.note;
+  const status = note.includes('취소') ? 'cancelled' : history?.status ?? (isPastDate(gameDate) ? 'pending_result' : 'scheduled');
 
   return NextResponse.json({
     success: true,
+    missingResult:
+      status === 'pending_result'
+        ? {
+            gameDate,
+            awayTeam,
+            homeTeam,
+            stadium: data.stadium,
+            reason: 'past_schedule_without_history',
+          }
+        : null,
     schedule: {
       day: toDashboardDate(gameDate),
       date: toDashboardDate(gameDate),
@@ -82,11 +115,14 @@ export async function GET(request: Request) {
       matchRaw: `${awayTeam} vs ${homeTeam}`,
       awayTeam,
       homeTeam,
-      awayScore: null,
-      homeScore: null,
+      awayScore: history?.away_score ?? null,
+      homeScore: history?.home_score ?? null,
       stadium: data.stadium,
-      status: data.note.includes('취소') ? 'cancelled' : 'scheduled',
-      note: data.note || null,
+      status,
+      note: note || null,
+      winningPitcherName: history?.winning_pitcher_name ?? null,
+      losingPitcherName: history?.losing_pitcher_name ?? null,
+      savePitcherName: null,
     },
   });
 }

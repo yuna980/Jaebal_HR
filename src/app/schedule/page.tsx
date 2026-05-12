@@ -2,11 +2,10 @@
 
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarDays, ChevronLeft, ChevronRight, Loader2, MapPin, X } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Loader2, MapPin, PenLine, Star, X } from 'lucide-react';
 import { useTeam } from '@/context/TeamContext';
 import TeamLogo from '@/components/TeamLogo';
-import { prefetchLineup, useKboLineup } from '@/hooks/useKboExtra';
 import { useGameScheduleMonth } from '@/hooks/useGameScheduleMonth';
 import { KboMatch, TEAM_NAME_TO_ID } from '@/lib/kboScraper';
 import { KBO_TEAMS } from '@/data/teams';
@@ -30,6 +29,8 @@ interface CalendarCell {
 function getMonthLabel(date: Date) {
   return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
 }
+
+const weekdayLabels = ['일', '월', '화', '수', '목', '금', '토'];
 
 function buildCalendarCells(baseDate: Date, schedules: KboMatch[]): CalendarCell[] {
   const year = baseDate.getFullYear();
@@ -100,9 +101,8 @@ function getTeamByName(name: string) {
   return KBO_TEAMS.find((team) => team.id === teamId) ?? null;
 }
 
-function getLineupColumns<T>(items: T[]) {
-  const midpoint = Math.ceil(items.length / 2);
-  return [items.slice(0, midpoint), items.slice(midpoint)];
+function getTeamFullName(name: string) {
+  return getTeamByName(name)?.fullName ?? name;
 }
 
 function isPreRegularSeason(dateText: string) {
@@ -114,18 +114,29 @@ function formatModalHeadline(dateText: string, dayOfWeek: string) {
   return `${month}월 ${day}일 ${dayOfWeek}요일`;
 }
 
+function getDayOfWeekFromDateText(year: number, dateText: string) {
+  const [monthText, dayText] = dateText.split('.');
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || day < 1) {
+    return '';
+  }
+
+  return weekdayLabels[new Date(Date.UTC(year, month - 1, day)).getUTCDay()] ?? '';
+}
+
 const sectionDividerStyle: CSSProperties = {
   height: '1px',
   background: 'rgba(226, 232, 240, 0.9)',
   margin: '22px 0',
 };
 
-function getLineupEmptyMessage(status: KboMatch['status']) {
-  if (status === 'finished') {
-    return '과거 라인업 데이터가 아직 저장되지 않았어요.';
-  }
-
-  return '아직 라인업이 발표되지 않았어요.';
+function getScheduleStatusLabel(game: KboMatch, pendingLabel = '결과 업데이트 중') {
+  if (game.status === 'finished') return '경기 종료';
+  if (game.status === 'cancelled') return game.note || '경기 취소';
+  if (game.status === 'pending_result') return pendingLabel;
+  return `${game.time} 예정`;
 }
 
 export default function SchedulePage() {
@@ -136,6 +147,8 @@ export default function SchedulePage() {
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedGameKey, setSelectedGameKey] = useState<string | null>(null);
+  const [modalSchedulesSnapshot, setModalSchedulesSnapshot] = useState<KboMatch[] | null>(null);
+  const [isGameModalOpen, setIsGameModalOpen] = useState(false);
   const [isDiaryModalOpen, setIsDiaryModalOpen] = useState(false);
   const diaryRecords = useFanDiaryRecords();
   const attendanceRecords = useAttendanceRecords();
@@ -144,6 +157,7 @@ export default function SchedulePage() {
     visibleMonth.getFullYear(),
     visibleMonth.getMonth() + 1
   );
+  const modalDisplaySchedules = modalSchedulesSnapshot ?? schedules;
   const todayFullDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   const calendarCells = useMemo(
@@ -152,8 +166,8 @@ export default function SchedulePage() {
   );
 
   const selectedDateGames = useMemo(
-    () => (selectedDate ? schedules.filter((game) => game.date === selectedDate) : []),
-    [schedules, selectedDate]
+    () => (selectedDate ? modalDisplaySchedules.filter((game) => game.date === selectedDate) : []),
+    [modalDisplaySchedules, selectedDate]
   );
 
   const selectedGame = useMemo(
@@ -168,11 +182,6 @@ export default function SchedulePage() {
         TEAM_NAME_TO_ID[selectedGame.awayTeam] === myTeam.id)
   );
 
-  const { lineup, loading: lineupLoading, loaded: lineupLoaded } = useKboLineup(
-    isMyTeamGame ? myTeam?.id : undefined,
-    selectedGame?.date ?? ''
-  );
-
   const openDayModal = (date: string, games: KboMatch[]) => {
     if (games.length === 0) return;
     const myTeamId = myTeam?.id;
@@ -183,8 +192,10 @@ export default function SchedulePage() {
           TEAM_NAME_TO_ID[game.homeTeam] === myTeamId || TEAM_NAME_TO_ID[game.awayTeam] === myTeamId
       ) ?? games[0];
 
+    setModalSchedulesSnapshot(schedules);
     setSelectedDate(date);
     setSelectedGameKey(getGameKey(preferredGame));
+    setIsGameModalOpen(true);
   };
 
   const handleDiaryDateChange = (date: string) => {
@@ -203,39 +214,42 @@ export default function SchedulePage() {
   };
 
   const closeModal = () => {
+    setIsGameModalOpen(false);
+    setModalSchedulesSnapshot(null);
+  };
+
+  const clearSelection = () => {
     setSelectedDate(null);
     setSelectedGameKey(null);
+    setIsGameModalOpen(false);
+    setModalSchedulesSnapshot(null);
   };
 
   const changeMonth = (offset: number) => {
     setVisibleMonth(
       new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + offset, 1)
     );
-    closeModal();
+    clearSelection();
   };
 
   const monthIsEmpty = !loading && schedules.length === 0;
-  const monthlyMyTeamGames = useMemo(
-    () =>
-      schedules.filter(
-        (game) => TEAM_NAME_TO_ID[game.homeTeam] === myTeam?.id || TEAM_NAME_TO_ID[game.awayTeam] === myTeam?.id
-      ),
-    [schedules, myTeam?.id]
-  );
   useEffect(() => {
-    if (!myTeam || monthlyMyTeamGames.length === 0) return;
+    if (!isGameModalOpen || !selectedGame) return;
 
-    const uniqueDates = Array.from(new Set(monthlyMyTeamGames.map((game) => game.date)));
-    uniqueDates.forEach((date) => {
-      void prefetchLineup(myTeam.id, date);
-    });
-  }, [myTeam, monthlyMyTeamGames]);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isGameModalOpen, selectedGame]);
   const selectedFullDate = selectedDate ? formatDiaryDate(visibleMonth.getFullYear(), selectedDate) : '';
   const selectedDiaryRecord =
     selectedDate && myTeam ? findRecordForDate(diaryRecords, myTeam.id, selectedFullDate) : null;
   const selectedAttendanceRecord =
     selectedDate && myTeam ? findAttendanceRecord(attendanceRecords, myTeam.id, selectedFullDate) : null;
-  const attendanceLabel = selectedAttendanceRecord?.isAttending ? '직관' : '중계';
+  const attendanceLabel = selectedAttendanceRecord?.isAttending ? '직관' : '집관';
+  const attendanceIcon = selectedAttendanceRecord?.isAttending ? '🏟️' : '📺';
 
   if (!myTeam) return null;
 
@@ -353,15 +367,15 @@ export default function SchedulePage() {
                   disabled={!cell.isCurrentMonth || !hasGames}
                   label={cell.label}
                   isCurrentMonth={cell.isCurrentMonth}
-                  isSelected={false}
+                  isSelected={!isGameModalOpen && cell.date === selectedDate}
                   isToday={isToday}
                   preview={preview}
-                  accentColor={myTeam.color}
                 />
               );
             })}
           </div>
         )}
+
       </div>
 
       {error && !loading && (
@@ -380,13 +394,9 @@ export default function SchedulePage() {
         </div>
       )}
 
-      <AnimatePresence>
-        {selectedGame && selectedDate && (
-          <>
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+      {isGameModalOpen && selectedGame && selectedDate && (
+        <>
+            <button
               onClick={closeModal}
               style={{
                 position: 'fixed',
@@ -409,11 +419,7 @@ export default function SchedulePage() {
                 pointerEvents: 'none',
               }}
             >
-              <motion.div
-                initial={{ opacity: 0, y: 12, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 12, scale: 0.98 }}
-                transition={{ duration: 0.2 }}
+              <div
                 style={{
                   width: 'min(640px, calc(100vw - 32px))',
                   maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
@@ -452,7 +458,11 @@ export default function SchedulePage() {
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                           <p style={{ fontSize: '15px', color: 'var(--text-light)', fontWeight: 700 }}>
-                            {formatModalHeadline(selectedGame.date, selectedGame.dayOfWeek)}
+                            {formatModalHeadline(
+                              selectedGame.date,
+                              getDayOfWeekFromDateText(visibleMonth.getFullYear(), selectedGame.date) ||
+                                selectedGame.dayOfWeek
+                            )}
                           </p>
                           <button
                             onClick={closeModal}
@@ -510,11 +520,7 @@ export default function SchedulePage() {
                                   background: 'var(--background)',
                                 }}
                               >
-                                {selectedGame.status === 'finished'
-                                  ? '경기 종료'
-                                  : selectedGame.status === 'cancelled'
-                                    ? (selectedGame.note || '경기 취소')
-                                    : `${selectedGame.time} 예정`}
+                                {getScheduleStatusLabel(selectedGame)}
                               </span>
                             </div>
                           </div>
@@ -524,7 +530,7 @@ export default function SchedulePage() {
                               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
                                 <TeamLogo team={awayTeamInfo ?? null} size={56} />
                               </div>
-                              <div style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px' }}>{selectedGame.awayTeam}</div>
+                              <div style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px' }}>{getTeamFullName(selectedGame.awayTeam)}</div>
                               {result && (
                                 <div
                                   style={{
@@ -566,7 +572,7 @@ export default function SchedulePage() {
                               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
                                 <TeamLogo team={homeTeamInfo ?? null} size={56} />
                               </div>
-                              <div style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px' }}>{selectedGame.homeTeam}</div>
+                              <div style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px' }}>{getTeamFullName(selectedGame.homeTeam)}</div>
                               {result && (
                                 <div
                                   style={{
@@ -626,113 +632,60 @@ export default function SchedulePage() {
                         {isMyTeamGame && selectedGame.status === 'finished' && (
                           <>
                             <div style={sectionDividerStyle} />
-                            <button
-                              onClick={() => setIsDiaryModalOpen(true)}
-                              style={{
-                                width: '100%',
-                                textAlign: 'left',
-                                padding: '16px 18px',
-                                borderRadius: '18px',
-                                background: '#FEF2F2',
-                                color: '#BE123C',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '14px',
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                                <div
-                                  style={{
-                                    width: '38px',
-                                    height: '38px',
-                                    borderRadius: '9999px',
-                                    background: '#FFFFFF',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '18px',
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  ✍️
-                                </div>
-                                <div style={{ minWidth: 0 }}>
-                                  <div style={{ fontSize: '15px', fontWeight: 800, marginBottom: '4px' }}>
-                                    {selectedDiaryRecord?.review ? '내 일기 보러가기' : '야구 일기 작성하기'}
+                            {selectedDiaryRecord?.review ? (
+                              <button
+                                onClick={() => setIsDiaryModalOpen(true)}
+                                className="schedule-diary-card schedule-diary-written"
+                              >
+                                <div className="schedule-diary-written-header">
+                                  <div className="schedule-diary-written-title">
+                                    <BookOpen size={21} strokeWidth={2.4} />
+                                    나의 야구 일기
                                   </div>
-                                  <div style={{ fontSize: '13px', color: '#9F1239', lineHeight: 1.45 }}>
-                                    {selectedDiaryRecord?.review
-                                      ? selectedDiaryRecord.review
-                                      : '이 경기의 감동을 기록으로 남겨보세요.'}
-                                  </div>
-                                </div>
-                              </div>
-                              <ChevronRight size={18} color="#BE123C" />
-                            </button>
-                          </>
-                        )}
-
-                        {isMyTeamGame && selectedGame.status !== 'cancelled' && (
-                          <>
-                            <div style={sectionDividerStyle} />
-                            <section>
-                              <h4 style={{ fontSize: '18px', marginBottom: '14px' }}>내 팀 상세 정보</h4>
-
-                              {lineupLoading && !lineupLoaded ? (
-                                <p style={{ color: 'var(--text-light)', fontSize: '14px' }}>
-                                  라인업 데이터를 불러오는 중이에요.
-                                </p>
-                              ) : (
-                                <>
-                                  {lineup?.startingPitcher && (
-                                    <div style={{ padding: '14px 16px', borderRadius: '16px', background: 'var(--background)', marginBottom: '14px' }}>
-                                      <div style={{ fontSize: '12px', color: 'var(--text-light)', marginBottom: '4px' }}>선발 투수</div>
-                                      <div style={{ fontSize: '16px', fontWeight: 800 }}>{lineup.startingPitcher.name}</div>
-                                    </div>
-                                  )}
-
-                                  {!lineup?.isLineupOut ? (
-                                    <p style={{ color: 'var(--text-light)', fontSize: '14px' }}>
-                                      {selectedGame.status === 'finished'
-                                        ? getLineupEmptyMessage(selectedGame.status)
-                                        : '선발 라인업은 경기 전 공개되면 여기에 보여드려요.'}
-                                    </p>
-                                  ) : lineup.battingOrder.length > 0 ? (
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 10px' }}>
-                                      {getLineupColumns(lineup.battingOrder).map((column, columnIndex) => (
-                                        <div key={columnIndex} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                          {column.map((batter) => (
-                                            <div
-                                              key={`${batter.order}-${batter.name}`}
-                                              style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '8px',
-                                                padding: '8px 10px',
-                                                borderRadius: '10px',
-                                                background: 'var(--background)',
-                                                fontSize: '13px',
-                                              }}
-                                            >
-                                              <span style={{ fontWeight: 800, color: myTeam.color }}>{batter.order}</span>
-                                              <span style={{ color: 'var(--text-light)', minWidth: '32px', fontSize: '12px' }}>{batter.position}</span>
-                                              <span style={{ fontWeight: 700, fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                {batter.name}
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </div>
+                                  <div className="schedule-diary-written-meta">
+                                    <span className="schedule-diary-attendance-badge">
+                                      <span style={{ fontSize: '13px' }}>{attendanceIcon}</span>
+                                      {attendanceLabel}
+                                    </span>
+                                    <div
+                                      className="schedule-diary-stars"
+                                      aria-label={`별점 ${selectedDiaryRecord.rating.toFixed(1)}점`}
+                                    >
+                                      {Array.from({ length: 5 }).map((_, index) => (
+                                        <Star
+                                          key={index}
+                                          size={18}
+                                          fill={index < Math.round(selectedDiaryRecord.rating) ? '#FBBF24' : 'transparent'}
+                                          color={index < Math.round(selectedDiaryRecord.rating) ? '#FBBF24' : '#FDE68A'}
+                                          strokeWidth={2.4}
+                                        />
                                       ))}
                                     </div>
-                                  ) : (
-                                    <p style={{ color: 'var(--text-light)', fontSize: '14px' }}>
-                                      라인업 상세 데이터를 정리하는 중이에요.
-                                    </p>
-                                  )}
-                                </>
-                              )}
-                            </section>
+                                  </div>
+                                </div>
+                                <div className="schedule-diary-review-box">
+                                  &quot;{selectedDiaryRecord.review}&quot;
+                                </div>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setIsDiaryModalOpen(true)}
+                                className="schedule-diary-card schedule-diary-empty"
+                              >
+                                <div className="schedule-diary-empty-main">
+                                  <div className="schedule-diary-empty-icon">
+                                    <PenLine size={18} />
+                                  </div>
+                                  <div>
+                                    <p className="schedule-diary-empty-copy">아직 기록된 추억이 없어요 텅~</p>
+                                    <h4 className="schedule-diary-empty-title">야구 일기 작성하러 가기</h4>
+                                  </div>
+                                </div>
+                                <div className="schedule-diary-empty-arrow">
+                                  <ChevronRight size={16} />
+                                </div>
+                              </button>
+                            )}
                           </>
                         )}
 
@@ -780,14 +733,10 @@ export default function SchedulePage() {
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
                                     <div style={{ flex: 1 }}>
                                       <div style={{ fontSize: '14px', fontWeight: 800, marginBottom: '4px' }}>
-                                        {game.awayTeam} VS {game.homeTeam}
+                                        {getTeamFullName(game.awayTeam)} VS {getTeamFullName(game.homeTeam)}
                                       </div>
                                       <div style={{ fontSize: '12px', color: 'var(--text-light)' }}>
-                                        {game.stadium} · {game.status === 'finished'
-                                          ? '종료'
-                                          : game.status === 'cancelled'
-                                            ? (game.note || '경기 취소')
-                                            : `${game.time} 시작`}
+                                        {game.stadium} · {getScheduleStatusLabel(game, '결과 확인 중')}
                                       </div>
                                       {game.status === 'finished' && (
                                         <div style={{ fontSize: '11px', color: 'var(--text-light)', marginTop: '4px' }}>
@@ -812,11 +761,11 @@ export default function SchedulePage() {
                                           {resultInfo && (
                                             <div style={{ fontSize: '11px', marginTop: '2px' }}>
                                               <span style={{ color: awayTone.color, fontWeight: awayTone.fontWeight }}>
-                                                {game.awayTeam} {resultInfo.away}
+                                                {getTeamFullName(game.awayTeam)} {resultInfo.away}
                                               </span>
                                               <span style={{ color: 'var(--text-light)' }}> · </span>
                                               <span style={{ color: homeTone.color, fontWeight: homeTone.fontWeight }}>
-                                                {game.homeTeam} {resultInfo.home}
+                                                {getTeamFullName(game.homeTeam)} {resultInfo.home}
                                               </span>
                                             </div>
                                           )}
@@ -824,6 +773,10 @@ export default function SchedulePage() {
                                       ) : game.status === 'cancelled' ? (
                                         <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--error)' }}>
                                           취소
+                                        </div>
+                                      ) : game.status === 'pending_result' ? (
+                                        <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-light)' }}>
+                                          확인 중
                                         </div>
                                       ) : (
                                         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-light)' }}>
@@ -841,15 +794,15 @@ export default function SchedulePage() {
                     </>
                   );
                 })()}
-              </motion.div>
+              </div>
             </div>
           </>
         )}
-      </AnimatePresence>
 
       <DiaryModal
         isOpen={isDiaryModalOpen}
         onClose={() => setIsDiaryModalOpen(false)}
+        mode={selectedDiaryRecord ? 'edit' : 'create'}
         myTeamId={myTeam.id}
         selectedGame={selectedGame}
         selectedDate={selectedDate ?? ''}

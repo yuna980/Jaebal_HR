@@ -35,4 +35,14 @@ const finishedPreview = buildCalendarGamePreview(finishedGame, myTeamId);
 assert.equal(finishedPreview.badge, '승');
 assert.equal(finishedPreview.tone, 'finished');
 
+const pendingResultPreview = buildCalendarGamePreview(
+  {
+    ...awayGame,
+    status: 'pending_result',
+  },
+  myTeamId
+);
+assert.equal(pendingResultPreview.badge, '확인중');
+assert.equal(pendingResultPreview.tone, 'pending_result');
+
 console.log('schedule calendar preview test passed');

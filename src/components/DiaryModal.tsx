@@ -10,13 +10,14 @@ import { setAttendanceForGame } from '@/lib/attendance';
 interface DiaryModalProps {
   isOpen: boolean;
   onClose: () => void;
+  mode?: 'create' | 'edit';
   myTeamId: string;
   selectedGame: KboMatch | null;
   selectedDate: string;
   onDateChange: (date: string) => void;
   finishedGames: KboMatch[];
   currentRecord: FanDiaryRecord | null;
-  attendanceLabel: '직관' | '중계';
+  attendanceLabel: '직관' | '집관';
   year: number;
 }
 
@@ -24,6 +25,7 @@ type DiaryModalFormProps = Omit<DiaryModalProps, 'isOpen'>;
 
 function DiaryModalForm({
   onClose,
+  mode = 'create',
   myTeamId,
   selectedGame,
   selectedDate,
@@ -33,16 +35,17 @@ function DiaryModalForm({
   attendanceLabel,
   year,
 }: DiaryModalFormProps) {
-  const [reviewText, setReviewText] = useState(currentRecord?.review ?? '');
-  const [rating, setRating] = useState(currentRecord?.rating ?? 0);
-  const [selectedAttendanceLabel, setSelectedAttendanceLabel] = useState<'직관' | '중계'>(attendanceLabel);
+  const isEditMode = mode === 'edit';
+  const [reviewText, setReviewText] = useState(isEditMode ? currentRecord?.review ?? '' : '');
+  const [rating, setRating] = useState(isEditMode ? currentRecord?.rating ?? 0 : 0);
+  const [selectedAttendanceLabel, setSelectedAttendanceLabel] = useState<'직관' | '집관'>(attendanceLabel);
   const attendanceOptions: Array<{
-    value: '중계' | '직관';
+    value: '집관' | '직관';
     label: string;
     icon: string;
     activeColor: string;
   }> = [
-    { value: '중계', label: '집에서 중계', icon: '📺', activeColor: 'var(--text)' },
+    { value: '집관', label: '집에서 봤어요', icon: '📺', activeColor: 'var(--text)' },
     { value: '직관', label: '직접 다녀왔어요', icon: '🏟️', activeColor: '#059669' },
   ];
 
@@ -222,10 +225,10 @@ function DiaryModalForm({
           onClick={handleSave}
           disabled={rating === 0 || !reviewText.trim()}
         >
-          {currentRecord?.review ? '수정 저장하기' : '기록 저장하기'}
+          {isEditMode ? '야구일기 수정하기' : '야구일기 등록하기'}
         </button>
 
-        {currentRecord?.review && (
+        {isEditMode && currentRecord?.review && (
           <button
             onClick={handleDelete}
             style={{
@@ -250,6 +253,7 @@ function DiaryModalForm({
 export default function DiaryModal({
   isOpen,
   onClose,
+  mode = 'create',
   myTeamId,
   selectedGame,
   selectedDate,
@@ -259,6 +263,8 @@ export default function DiaryModal({
   attendanceLabel,
   year,
 }: DiaryModalProps) {
+  const isEditMode = mode === 'edit';
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -312,7 +318,7 @@ export default function DiaryModal({
               }}
             >
               <h3 style={{ fontSize: '20px' }}>
-                {currentRecord?.review ? '야구 일기 수정' : '야구 일기 쓰기'}
+                {isEditMode ? '야구일기 수정' : '야구일기 작성'}
               </h3>
               <button onClick={onClose}>
                 <X size={24} color="var(--text-light)" />
@@ -321,8 +327,9 @@ export default function DiaryModal({
 
             <div style={{ overflowY: 'auto', padding: '20px 24px 24px' }}>
               <DiaryModalForm
-                key={`form-${selectedDate}-${currentRecord?.review ?? ''}-${currentRecord?.rating ?? 0}-${attendanceLabel}`}
+                key={`form-${mode}-${selectedDate}-${currentRecord?.review ?? ''}-${currentRecord?.rating ?? 0}-${attendanceLabel}`}
                 onClose={onClose}
+                mode={mode}
                 myTeamId={myTeamId}
                 selectedGame={selectedGame}
                 selectedDate={selectedDate}

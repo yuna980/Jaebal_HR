@@ -33,6 +33,14 @@ type HistoryRow = {
   losing_pitcher_name: string | null;
 };
 
+type MissingResult = {
+  gameDate: string;
+  awayTeam: string;
+  homeTeam: string;
+  stadium: string;
+  reason: 'past_schedule_without_history';
+};
+
 function buildMonthRange(year: number, month: number) {
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const nextMonthDate = new Date(Date.UTC(year, month, 1));
@@ -47,8 +55,29 @@ function toDateText(gameDate: string) {
 }
 
 function toDayOfWeek(gameDate: string) {
-  const date = new Date(`${gameDate}T00:00:00+09:00`);
-  return DAYS[date.getDay()] ?? '';
+  const [, yearText, monthText, dayText] = gameDate.match(/^(\d{4})-(\d{2})-(\d{2})$/) ?? [];
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return '';
+  }
+
+  return DAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()] ?? '';
+}
+
+function getKstToday() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function isPastGameWithoutHistory(gameDate: string, history: HistoryRow | undefined, note: string | null | undefined) {
+  return gameDate < getKstToday() && !history && !note?.includes('취소');
 }
 
 function getGameKey(row: Pick<ScheduleRow, 'game_date' | 'home_team_id' | 'away_team_id'>) {
@@ -115,13 +144,26 @@ export async function GET(request: Request) {
     ((historyRows ?? []) as HistoryRow[]).map((row) => [getGameKey(row), row])
   );
 
+  const missingResults: MissingResult[] = [];
+
   const schedules = ((scheduleRows ?? []) as ScheduleRow[]).map((schedule) => {
     const history = historyMap.get(getGameKey(schedule));
     const awayTeam = TEAM_BY_ID[schedule.away_team_id] ?? schedule.away_team_id;
     const homeTeam = TEAM_BY_ID[schedule.home_team_id] ?? schedule.home_team_id;
     const date = toDateText(schedule.game_date);
     const note = history?.note && history.note !== '-' ? history.note : schedule.note;
-    const status = note?.includes('취소') ? 'cancelled' : history?.status ?? 'scheduled';
+    const isMissingResult = isPastGameWithoutHistory(schedule.game_date, history, note);
+    const status = note?.includes('취소') ? 'cancelled' : history?.status ?? (isMissingResult ? 'pending_result' : 'scheduled');
+
+    if (isMissingResult) {
+      missingResults.push({
+        gameDate: schedule.game_date,
+        awayTeam,
+        homeTeam,
+        stadium: schedule.stadium,
+        reason: 'past_schedule_without_history',
+      });
+    }
 
     return {
       day: `${date}(${toDayOfWeek(schedule.game_date)})`,
@@ -145,6 +187,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     success: true,
     schedules,
+    missingResults,
     source: 'db',
   });
 }

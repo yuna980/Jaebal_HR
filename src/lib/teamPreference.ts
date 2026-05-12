@@ -1,6 +1,6 @@
 'use client';
 
-import { ensureAnonymousSession } from '@/lib/supabase/auth';
+import { ensureAuthenticatedUserLocalDataOwner, getCurrentUserId } from '@/lib/supabase/auth';
 import { getSupabaseBrowserClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 const TEAM_STORAGE_KEY = 'myTeamId';
@@ -29,10 +29,10 @@ function writeLocalTeamId(teamId: string) {
   }
 }
 
-export async function saveSelectedTeamToSupabase(teamId: string) {
+export async function saveSelectedTeamToSupabase(teamId: string, knownUserId?: string | null) {
   if (!isSupabaseConfigured()) return;
 
-  const userId = await ensureAnonymousSession();
+  const userId = knownUserId ?? (await getCurrentUserId());
   const supabase = getSupabaseBrowserClient();
 
   if (!userId || !supabase) return;
@@ -60,11 +60,14 @@ export async function syncSelectedTeamFromSupabase() {
   }
 
   teamSyncPromise = (async () => {
-    const localTeamId = readLocalTeamId();
-    const userId = await ensureAnonymousSession();
+    const userId = await getCurrentUserId();
     const supabase = getSupabaseBrowserClient();
 
     if (!userId || !supabase) return;
+
+    ensureAuthenticatedUserLocalDataOwner(userId);
+
+    const localTeamId = readLocalTeamId();
 
     const { data, error } = await supabase
       .from('profiles')

@@ -9,8 +9,10 @@ export type StadiumParkingLot = {
 export type StadiumFoodVendor = {
   id: number;
   vendor_name: string;
+  category: string;
   main_menu: string;
   location_description: string;
+  is_best: boolean;
   display_order: number;
 };
 
@@ -26,6 +28,7 @@ export type StadiumDetail = {
   id: number;
   stadiumName: string;
   address: string;
+  publicTransportDirections: string;
   parkingLots: StadiumParkingLot[];
   foodVendors: StadiumFoodVendor[];
   goodsShops: StadiumGoodsShop[];
@@ -56,10 +59,15 @@ const STADIUM_CHIP_LABELS: Record<string, string> = {
   창원NC파크: 'NC',
 };
 
+const STADIUM_NAVER_SEARCH_KEYWORDS: Record<string, string> = {
+  SSG랜더스필드: 'SSG랜더스 필드',
+};
+
 export function getStadiumChipLabel(stadiumName: string) {
   return STADIUM_CHIP_LABELS[stadiumName] ?? stadiumName;
 }
 
-export function getStadiumDirectionsUrl(address: string) {
-  return `https://map.naver.com/p/search/${encodeURIComponent(address)}`;
+export function getStadiumDirectionsUrl(stadiumName: string) {
+  const searchKeyword = STADIUM_NAVER_SEARCH_KEYWORDS[stadiumName] ?? stadiumName;
+  return `https://map.naver.com/p/search/${encodeURIComponent(searchKeyword)}`;
 }

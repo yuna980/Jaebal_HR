@@ -9,7 +9,7 @@ import { prefetchTodayGameSchedule } from '@/hooks/useTodayGameSchedule';
 
 interface TeamContextType {
   myTeam: Team | null;
-  selectTeam: (teamId: string) => void;
+  selectTeam: (teamId: string, knownUserId?: string | null) => Promise<void>;
   isGoingToday: boolean;
   setIsGoingToday: (value: boolean) => void;
 }
@@ -55,12 +55,12 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     prefetchGameScheduleMonth(today.getFullYear(), today.getMonth() + 1);
   }, [selectedTeamId]);
 
-  const selectTeam = (teamId: string) => {
+  const selectTeam = async (teamId: string, knownUserId?: string | null) => {
     const team = KBO_TEAMS.find((t) => t.id === teamId);
     if (team) {
       localStorage.setItem(TEAM_STORAGE_KEY, teamId);
       window.dispatchEvent(new Event(TEAM_CHANGE_EVENT));
-      void saveSelectedTeamToSupabase(teamId);
+      await saveSelectedTeamToSupabase(teamId, knownUserId);
     }
   };
 

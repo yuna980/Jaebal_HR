@@ -2,7 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { KboMatch, TEAM_NAME_TO_ID } from '@/lib/kboScraper';
-import { ensureAnonymousSession } from '@/lib/supabase/auth';
+import { ensureAuthenticatedUserLocalDataOwner, getCurrentUserId } from '@/lib/supabase/auth';
 import { getSupabaseBrowserClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 export interface FanDiaryRecord {
@@ -221,7 +221,7 @@ function mergeFanDiaryRecords(localRecords: FanDiaryRecord[], remoteRecords: Fan
 async function fetchFanDiaryRecordsFromSupabase() {
   if (!isSupabaseConfigured()) return [];
 
-  const userId = await ensureAnonymousSession();
+  const userId = await getCurrentUserId();
   const supabase = getSupabaseBrowserClient();
 
   if (!userId || !supabase) return [];
@@ -254,7 +254,7 @@ async function fetchFanDiaryRecordsFromSupabase() {
 async function upsertFanDiaryRecordToSupabase(record: FanDiaryRecord) {
   if (!isSupabaseConfigured()) return;
 
-  const userId = await ensureAnonymousSession();
+  const userId = await getCurrentUserId();
   const supabase = getSupabaseBrowserClient();
 
   if (!userId || !supabase) return;
@@ -282,7 +282,7 @@ async function upsertFanDiaryRecordToSupabase(record: FanDiaryRecord) {
 async function upsertFanDiaryRecordsToSupabase(records: FanDiaryRecord[]) {
   if (!isSupabaseConfigured() || records.length === 0) return;
 
-  const userId = await ensureAnonymousSession();
+  const userId = await getCurrentUserId();
   const supabase = getSupabaseBrowserClient();
 
   if (!userId || !supabase) return;
@@ -310,7 +310,7 @@ async function upsertFanDiaryRecordsToSupabase(records: FanDiaryRecord[]) {
 async function deleteFanDiaryRecordFromSupabase(teamId: string, fullDate: string) {
   if (!isSupabaseConfigured()) return;
 
-  const userId = await ensureAnonymousSession();
+  const userId = await getCurrentUserId();
   const supabase = getSupabaseBrowserClient();
 
   if (!userId || !supabase) return;
@@ -330,7 +330,7 @@ async function deleteFanDiaryRecordFromSupabase(teamId: string, fullDate: string
 async function cleanupPlaceholderFanDiaryRecordsInSupabase() {
   if (!isSupabaseConfigured()) return;
 
-  const userId = await ensureAnonymousSession();
+  const userId = await getCurrentUserId();
   const supabase = getSupabaseBrowserClient();
 
   if (!userId || !supabase) return;
@@ -356,6 +356,12 @@ export async function syncFanDiaryRecordsFromSupabase() {
   }
 
   fanDiarySyncPromise = (async () => {
+    const userId = await getCurrentUserId();
+
+    if (!userId) return;
+
+    ensureAuthenticatedUserLocalDataOwner(userId);
+
     const localRecords = readFanDiaryRecords();
     const remoteRecords = await fetchFanDiaryRecordsFromSupabase();
     const mergedRecords = mergeFanDiaryRecords(localRecords, remoteRecords);

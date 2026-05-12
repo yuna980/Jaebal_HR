@@ -7,12 +7,13 @@ import type {
 } from '@/lib/stadiumInfo';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 21600;
 
 type StadiumRow = {
   id: number;
   stadium_name: string;
   address: string;
+  public_transport_directions: string;
 };
 
 type ParkingRow = StadiumParkingLot & {
@@ -40,14 +41,17 @@ async function getStadiumDetails(): Promise<StadiumDetail[]> {
     { data: foodRows, error: foodError },
     { data: goodsRows, error: goodsError },
   ] = await Promise.all([
-    supabase.from('stadiums').select('id, stadium_name, address').order('id', { ascending: true }),
+    supabase
+      .from('stadiums')
+      .select('id, stadium_name, address, public_transport_directions')
+      .order('id', { ascending: true }),
     supabase
       .from('stadium_parking_lots')
       .select('id, stadium_name, parking_location, fee_description, note, display_order')
       .order('display_order', { ascending: true }),
     supabase
       .from('stadium_food_vendors')
-      .select('id, stadium_name, vendor_name, main_menu, location_description, display_order')
+      .select('id, stadium_name, vendor_name, category, main_menu, location_description, is_best, display_order')
       .order('display_order', { ascending: true }),
     supabase
       .from('stadium_goods_shops')
@@ -84,8 +88,10 @@ async function getStadiumDetails(): Promise<StadiumDetail[]> {
     current.push({
       id: row.id,
       vendor_name: row.vendor_name,
+      category: row.category,
       main_menu: row.main_menu,
       location_description: row.location_description,
+      is_best: row.is_best,
       display_order: row.display_order,
     });
     foodByStadium.set(row.stadium_name, current);
@@ -107,6 +113,7 @@ async function getStadiumDetails(): Promise<StadiumDetail[]> {
     id: stadium.id,
     stadiumName: stadium.stadium_name,
     address: stadium.address,
+    publicTransportDirections: stadium.public_transport_directions,
     parkingLots: parkingByStadium.get(stadium.stadium_name) ?? [],
     foodVendors: foodByStadium.get(stadium.stadium_name) ?? [],
     goodsShops: goodsByStadium.get(stadium.stadium_name) ?? [],

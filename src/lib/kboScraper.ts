@@ -23,8 +23,8 @@ export interface KboMatch {
   homeScore: number | null;
   /** 구장 이름 */
   stadium: string;
-  /** 경기 상태: 'scheduled' | 'finished' | 'cancelled' */
-  status: 'scheduled' | 'finished' | 'cancelled';
+  /** 경기 상태: 'scheduled' | 'finished' | 'cancelled' | 'pending_result' */
+  status: 'scheduled' | 'finished' | 'cancelled' | 'pending_result';
   /** 비고 */
   note?: string | null;
   /** 승리 투수 */

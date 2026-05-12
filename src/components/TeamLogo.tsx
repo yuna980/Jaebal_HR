@@ -54,6 +54,7 @@ export default function TeamLogo({ team, size = 32, rounded = false }: TeamLogoP
         alt={team.fullName}
         width={innerSize}
         height={innerSize}
+        unoptimized
         style={{
           width: innerSize,
           height: innerSize,

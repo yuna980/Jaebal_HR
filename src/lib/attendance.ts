@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useSyncExternalStore } from 'react';
-import { ensureAnonymousSession } from '@/lib/supabase/auth';
+import { ensureAuthenticatedUserLocalDataOwner, getCurrentUserId } from '@/lib/supabase/auth';
 import { getSupabaseBrowserClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 export interface AttendanceRecord {
@@ -182,7 +182,7 @@ function mergeAttendanceRecords(localRecords: AttendanceRecord[], remoteRecords:
 async function fetchAttendanceRecordsFromSupabase() {
   if (!isSupabaseConfigured()) return [];
 
-  const userId = await ensureAnonymousSession();
+  const userId = await getCurrentUserId();
   const supabase = getSupabaseBrowserClient();
 
   if (!userId || !supabase) return [];
@@ -209,7 +209,7 @@ async function fetchAttendanceRecordsFromSupabase() {
 async function upsertAttendanceRecordToSupabase(record: AttendanceRecord) {
   if (!isSupabaseConfigured()) return;
 
-  const userId = await ensureAnonymousSession();
+  const userId = await getCurrentUserId();
   const supabase = getSupabaseBrowserClient();
 
   if (!userId || !supabase) return;
@@ -235,7 +235,7 @@ async function upsertAttendanceRecordToSupabase(record: AttendanceRecord) {
 async function upsertAttendanceRecordsToSupabase(records: AttendanceRecord[]) {
   if (!isSupabaseConfigured() || records.length === 0) return;
 
-  const userId = await ensureAnonymousSession();
+  const userId = await getCurrentUserId();
   const supabase = getSupabaseBrowserClient();
 
   if (!userId || !supabase) return;
@@ -266,6 +266,12 @@ export async function syncAttendanceRecordsFromSupabase() {
   }
 
   attendanceSyncPromise = (async () => {
+    const userId = await getCurrentUserId();
+
+    if (!userId) return;
+
+    ensureAuthenticatedUserLocalDataOwner(userId);
+
     const localRecords = readAttendanceRecords();
     const remoteRecords = await fetchAttendanceRecordsFromSupabase();
     const mergedRecords = mergeAttendanceRecords(localRecords, remoteRecords);

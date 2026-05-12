@@ -2,15 +2,14 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { TeamProvider } from "@/context/TeamContext";
 import BottomNav from "@/components/BottomNav";
-import SupabaseBootstrap from "@/components/SupabaseBootstrap";
 
 export const metadata: Metadata = {
-  title: "제발 홈런",
+  title: "야구없인못살아",
   description: "내가 응원하는 팀의 정보와 직관 기록을 한번에!",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "제발 홈런",
+    title: "야구없인못살아",
   },
 };
 
@@ -31,7 +30,6 @@ export default function RootLayout({
     <html lang="ko">
       <body>
         <TeamProvider>
-          <SupabaseBootstrap />
           {children}
           <BottomNav />
         </TeamProvider>
