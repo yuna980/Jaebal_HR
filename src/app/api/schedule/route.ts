@@ -5,7 +5,7 @@ import { checkRateLimit } from '@/lib/apiSecurity';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  const rateLimit = checkRateLimit(request, 'schedule');
+  const rateLimit = await checkRateLimit(request, 'schedule');
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { success: false, schedules: [], message: '요청이 너무 많아요. 잠시 후 다시 시도해주세요.' },

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { createTimedMemoryCache } from '@/lib/requestCache';
 
 export interface LineupData {
   startingPitcher: {
@@ -43,6 +44,11 @@ export interface WeatherData {
 
 const lineupCache = new Map<string, LineupData | null>();
 const lineupRequestCache = new Map<string, Promise<LineupData | null>>();
+const EXTRA_CACHE_TTL_MS = 5 * 60 * 1000;
+const rosterCache = createTimedMemoryCache<RosterData | null>(EXTRA_CACHE_TTL_MS);
+const rosterRequestCache = new Map<string, Promise<RosterData | null>>();
+const weatherCache = createTimedMemoryCache<WeatherData | null>(EXTRA_CACHE_TTL_MS);
+const weatherRequestCache = new Map<string, Promise<WeatherData | null>>();
 
 function getLineupRequestKey(teamId: string | undefined, date: string) {
   return teamId && date ? `${teamId}-${date}` : 'none';
@@ -121,10 +127,11 @@ export function useKboLineup(teamId: string | undefined, date: string) {
 }
 
 export function useKboRoster(teamId: string | undefined) {
-  const [roster, setRoster] = useState<RosterData | null>(null);
-  const [loading, setLoading] = useState(Boolean(teamId));
-  const [loadedKey, setLoadedKey] = useState('');
   const requestKey = teamId ?? 'none';
+  const initialRoster = teamId ? rosterCache.get(requestKey) : null;
+  const [roster, setRoster] = useState<RosterData | null>(initialRoster);
+  const [loading, setLoading] = useState(Boolean(teamId && !rosterCache.has(requestKey)));
+  const [loadedKey, setLoadedKey] = useState(teamId && rosterCache.has(requestKey) ? requestKey : '');
 
   useEffect(() => {
     if (!teamId) {
@@ -134,30 +141,63 @@ export function useKboRoster(teamId: string | undefined) {
       return;
     }
 
+    const cachedRoster = rosterCache.get(requestKey);
+    if (rosterCache.has(requestKey)) {
+      setRoster(cachedRoster);
+      setLoading(false);
+      setLoadedKey(requestKey);
+      return;
+    }
+
+    let cancelled = false;
+
     const fetchRoster = async () => {
       setLoading(true);
       try {
-        const res = await axios.get(`/api/roster?teamId=${teamId}`);
-        setRoster(res.data);
+        const existingRequest = rosterRequestCache.get(requestKey);
+        const request =
+          existingRequest ??
+          axios.get(`/api/roster?teamId=${teamId}`).then((res) => {
+            rosterCache.set(requestKey, res.data);
+            return res.data as RosterData;
+          });
+
+        if (!existingRequest) {
+          rosterRequestCache.set(
+            requestKey,
+            request.finally(() => rosterRequestCache.delete(requestKey))
+          );
+        }
+
+        const nextRoster = await request;
+        if (cancelled) return;
+        setRoster(nextRoster);
       } catch (err) {
         console.error(err);
+        rosterCache.set(requestKey, null);
+        if (cancelled) return;
         setRoster(null);
       } finally {
+        if (cancelled) return;
         setLoading(false);
-        setLoadedKey(teamId);
+        setLoadedKey(requestKey);
       }
     };
     fetchRoster();
-  }, [teamId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [requestKey, teamId]);
 
   return { roster, loading, loaded: loadedKey === requestKey && !loading };
 }
 
 export function useGameWeather(stadium: string | undefined, time: string | undefined) {
-  const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [loading, setLoading] = useState(Boolean(stadium));
-  const [loadedKey, setLoadedKey] = useState('');
   const requestKey = stadium ? `${stadium}-${time ?? ''}` : 'none';
+  const initialWeather = stadium ? weatherCache.get(requestKey) : null;
+  const [weather, setWeather] = useState<WeatherData | null>(initialWeather);
+  const [loading, setLoading] = useState(Boolean(stadium && !weatherCache.has(requestKey)));
+  const [loadedKey, setLoadedKey] = useState(stadium && weatherCache.has(requestKey) ? requestKey : '');
 
   useEffect(() => {
     if (!stadium) {
@@ -167,6 +207,16 @@ export function useGameWeather(stadium: string | undefined, time: string | undef
       return;
     }
 
+    const cachedWeather = weatherCache.get(requestKey);
+    if (weatherCache.has(requestKey)) {
+      setWeather(cachedWeather);
+      setLoading(false);
+      setLoadedKey(requestKey);
+      return;
+    }
+
+    let cancelled = false;
+
     const fetchWeather = async () => {
       setLoading(true);
       try {
@@ -174,29 +224,50 @@ export function useGameWeather(stadium: string | undefined, time: string | undef
         params.set('stadium', stadium);
         if (time) params.set('time', time);
 
-        const res = await axios.get(`/api/weather?${params.toString()}`);
-        if (res.data?.success) {
-          setWeather({
-            temperature: res.data.temperature,
-            precipitation: res.data.precipitation,
-            airQualityPm10: res.data.airQualityPm10,
-            airQualityLabel: res.data.airQualityLabel,
-            observedTime: res.data.observedTime,
+        const existingRequest = weatherRequestCache.get(requestKey);
+        const request =
+          existingRequest ??
+          axios.get(`/api/weather?${params.toString()}`).then((res) => {
+            const nextWeather = res.data?.success
+              ? {
+                  temperature: res.data.temperature,
+                  precipitation: res.data.precipitation,
+                  airQualityPm10: res.data.airQualityPm10,
+                  airQualityLabel: res.data.airQualityLabel,
+                  observedTime: res.data.observedTime,
+                }
+              : null;
+            weatherCache.set(requestKey, nextWeather);
+            return nextWeather;
           });
-        } else {
-          setWeather(null);
+
+        if (!existingRequest) {
+          weatherRequestCache.set(
+            requestKey,
+            request.finally(() => weatherRequestCache.delete(requestKey))
+          );
         }
+
+        const nextWeather = await request;
+        if (cancelled) return;
+        setWeather(nextWeather);
       } catch (err) {
         console.error(err);
+        weatherCache.set(requestKey, null);
+        if (cancelled) return;
         setWeather(null);
       } finally {
+        if (cancelled) return;
         setLoading(false);
-        setLoadedKey(`${stadium}-${time ?? ''}`);
+        setLoadedKey(requestKey);
       }
     };
 
     fetchWeather();
-  }, [stadium, time]);
+    return () => {
+      cancelled = true;
+    };
+  }, [requestKey, stadium, time]);
 
   return { weather, loading, loaded: loadedKey === requestKey && !loading };
 }

@@ -9,6 +9,10 @@ interface UseGameScheduleMonthResult {
   error: string | null;
 }
 
+interface UseGameScheduleMonthOptions {
+  enabled?: boolean;
+}
+
 type MonthScheduleCacheEntry = {
   schedules: KboMatch[];
   savedAt: number;
@@ -101,12 +105,24 @@ export function prefetchGameScheduleMonth(year: number, month: number) {
   void fetchMonthSchedules(year, month).catch(() => {});
 }
 
-export function useGameScheduleMonth(year: number, month: number): UseGameScheduleMonthResult {
-  const [schedules, setSchedules] = useState<KboMatch[]>(() => readCachedSchedules(year, month) ?? []);
-  const [loading, setLoading] = useState(() => !readCachedSchedules(year, month));
+export function useGameScheduleMonth(
+  year: number,
+  month: number,
+  options: UseGameScheduleMonthOptions = {}
+): UseGameScheduleMonthResult {
+  const enabled = options.enabled ?? true;
+  const [schedules, setSchedules] = useState<KboMatch[]>(() => (enabled ? readCachedSchedules(year, month) ?? [] : []));
+  const [loading, setLoading] = useState(() => (enabled ? !readCachedSchedules(year, month) : false));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setSchedules([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     let cancelled = false;
     const cachedSchedules = readCachedSchedules(year, month);
 
@@ -145,7 +161,7 @@ export function useGameScheduleMonth(year: number, month: number): UseGameSchedu
     return () => {
       cancelled = true;
     };
-  }, [month, year]);
+  }, [enabled, month, year]);
 
   return { schedules, loading, error };
 }

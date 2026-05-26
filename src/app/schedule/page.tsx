@@ -139,6 +139,22 @@ function getScheduleStatusLabel(game: KboMatch, pendingLabel = '결과 업데이
   return `${game.time} 예정`;
 }
 
+function getMyTeamGameResult(game: KboMatch, teamId: string) {
+  if (game.status !== 'finished') return null;
+
+  const isHomeTeam = TEAM_NAME_TO_ID[game.homeTeam] === teamId;
+  const myScore = isHomeTeam ? game.homeScore : game.awayScore;
+  const opponentScore = isHomeTeam ? game.awayScore : game.homeScore;
+
+  if (typeof myScore !== 'number' || typeof opponentScore !== 'number') {
+    return null;
+  }
+
+  if (myScore > opponentScore) return 'win';
+  if (myScore < opponentScore) return 'loss';
+  return 'draw';
+}
+
 export default function SchedulePage() {
   const { myTeam } = useTeam();
   const today = new Date();
@@ -233,6 +249,44 @@ export default function SchedulePage() {
   };
 
   const monthIsEmpty = !loading && schedules.length === 0;
+  const monthSummary = useMemo(() => {
+    if (!myTeam) {
+      return {
+        total: 0,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        remaining: 0,
+      };
+    }
+
+    const myTeamGames = schedules.filter(
+      (game) =>
+        game.status !== 'cancelled' &&
+        (TEAM_NAME_TO_ID[game.homeTeam] === myTeam.id || TEAM_NAME_TO_ID[game.awayTeam] === myTeam.id)
+    );
+
+    return myTeamGames.reduce(
+      (summary, game) => {
+        const result = getMyTeamGameResult(game, myTeam.id);
+
+        if (result === 'win') summary.wins += 1;
+        if (result === 'loss') summary.losses += 1;
+        if (result === 'draw') summary.draws += 1;
+        if (game.status === 'scheduled') summary.remaining += 1;
+
+        return summary;
+      },
+      {
+        total: myTeamGames.length,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        remaining: 0,
+      }
+    );
+  }, [myTeam, schedules]);
+
   useEffect(() => {
     if (!isGameModalOpen || !selectedGame) return;
 
@@ -250,30 +304,63 @@ export default function SchedulePage() {
     selectedDate && myTeam ? findAttendanceRecord(attendanceRecords, myTeam.id, selectedFullDate) : null;
   const attendanceLabel = selectedAttendanceRecord?.isAttending ? '직관' : '집관';
   const attendanceIcon = selectedAttendanceRecord?.isAttending ? '🏟️' : '📺';
+  const diaryDateSet = useMemo(() => {
+    if (!myTeam) return new Set<string>();
+
+    return new Set(
+      diaryRecords
+        .filter((record) => record.teamId === myTeam.id && record.review.trim().length > 0)
+        .map((record) => record.date)
+    );
+  }, [diaryRecords, myTeam]);
 
   if (!myTeam) return null;
 
   return (
-    <div className="container">
-      <header style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-          <CalendarDays size={22} color={myTeam.color} />
-          <h2 style={{ fontSize: '24px' }}>{getMonthLabel(visibleMonth)} 대진표</h2>
-        </div>
-        <p style={{ color: 'var(--text-light)', fontSize: '14px' }}>
-          이번달 우리 팀 경기를 한눈에 볼 수 있어요.
-        </p>
-      </header>
+    <div className="container" style={{ background: '#F8FAFC', minHeight: '100vh' }}>
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          margin: '0 -16px 18px',
+          padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 14px',
+          background: 'rgba(248, 250, 252, 0.82)',
+          backdropFilter: 'blur(18px)',
+          WebkitBackdropFilter: 'blur(18px)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+              <CalendarDays size={19} color={myTeam.color} />
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#8B95A1' }}>월간 대진표</span>
+            </div>
+            <h2 style={{ fontSize: '23px', lineHeight: 1.15, color: '#191F28' }}>
+              {myTeam.fullName}
+            </h2>
+          </div>
 
-      <div className="card" style={{ padding: '14px', marginBottom: '16px', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+          <div
+            style={{
+              height: '44px',
+              borderRadius: '999px',
+              background: '#FFFFFF',
+              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
+              border: '1px solid rgba(226, 232, 240, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '0 5px',
+              flexShrink: 0,
+            }}
+          >
           <button
             onClick={() => changeMonth(-1)}
             style={{
-              width: '38px',
-              height: '38px',
+              width: '34px',
+              height: '34px',
               borderRadius: '9999px',
-              background: 'var(--background)',
+              background: '#F8FAFC',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -282,15 +369,17 @@ export default function SchedulePage() {
             <ChevronLeft size={18} />
           </button>
 
-          <strong style={{ fontSize: '17px' }}>{getMonthLabel(visibleMonth)}</strong>
+            <strong style={{ minWidth: '86px', textAlign: 'center', fontSize: '14px', color: '#191F28' }}>
+              {getMonthLabel(visibleMonth)}
+            </strong>
 
           <button
             onClick={() => changeMonth(1)}
             style={{
-              width: '38px',
-              height: '38px',
+              width: '34px',
+              height: '34px',
               borderRadius: '9999px',
-              background: 'var(--background)',
+              background: '#F8FAFC',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -299,13 +388,55 @@ export default function SchedulePage() {
             <ChevronRight size={18} />
           </button>
         </div>
+        </div>
+      </header>
+
+      <section
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+          alignItems: 'center',
+          borderRadius: '20px',
+          background: '#F1F5F9',
+          border: '1px solid rgba(226, 232, 240, 0.6)',
+          padding: '14px 8px',
+          marginBottom: '16px',
+        }}
+      >
+        {[
+          { label: '경기', value: monthSummary.total, color: '#334155' },
+          { label: '승', value: monthSummary.wins, color: '#059669' },
+          { label: '패', value: monthSummary.losses, color: '#E11D48' },
+          { label: '무', value: monthSummary.draws, color: '#64748B' },
+          { label: '잔여', value: monthSummary.remaining, color: '#6366F1' },
+        ].map((item, index) => (
+          <div
+            key={item.label}
+            style={{
+              minWidth: 0,
+              textAlign: 'center',
+              borderRight: index < 4 ? '1px solid rgba(203, 213, 225, 0.62)' : '0',
+            }}
+          >
+            <div style={{ fontSize: '18px', lineHeight: 1, fontWeight: 950, color: item.color, marginBottom: '5px' }}>
+              {item.value}
+            </div>
+            <div style={{ fontSize: '11px', lineHeight: 1, fontWeight: 800, color: '#8B95A1' }}>
+              {item.label}
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <div style={{ padding: '16px 0 8px', margin: '0 -10px 16px', overflow: 'visible' }}>
 
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-            gap: '6px',
-            marginBottom: '8px',
+            gap: '5px',
+            marginBottom: '10px',
+            padding: '0 2px',
           }}
         >
           {['일', '월', '화', '수', '목', '금', '토'].map((label) => (
@@ -314,9 +445,9 @@ export default function SchedulePage() {
               style={{
                 textAlign: 'center',
                 minWidth: 0,
-                fontSize: '12px',
-                fontWeight: 800,
-                color: label === '일' ? '#FF6B6B' : 'var(--text-light)',
+                fontSize: '11px',
+                fontWeight: 900,
+                color: label === '일' ? '#F43F5E' : '#94A3B8',
                 padding: '4px 0',
               }}
             >
@@ -343,7 +474,8 @@ export default function SchedulePage() {
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-              gap: '6px',
+              gap: '5px',
+              padding: '0 2px',
             }}
           >
             {calendarCells.map((cell) => {
@@ -357,6 +489,7 @@ export default function SchedulePage() {
                 ? buildCalendarGamePreview(myGame, myTeam.id)
                 : null;
               const isToday = cell.fullDate === todayFullDate;
+              const hasDiary = Boolean(cell.date && diaryDateSet.has(formatDiaryDate(visibleMonth.getFullYear(), cell.date)));
 
               return (
                 <ScheduleCalendarCell
@@ -367,8 +500,9 @@ export default function SchedulePage() {
                   disabled={!cell.isCurrentMonth || !hasGames}
                   label={cell.label}
                   isCurrentMonth={cell.isCurrentMonth}
-                  isSelected={!isGameModalOpen && cell.date === selectedDate}
+                  isSelected={cell.date === selectedDate}
                   isToday={isToday}
+                  hasDiary={hasDiary}
                   preview={preview}
                 />
               );
@@ -633,18 +767,17 @@ export default function SchedulePage() {
                           <>
                             <div style={sectionDividerStyle} />
                             {selectedDiaryRecord?.review ? (
-                              <button
-                                onClick={() => setIsDiaryModalOpen(true)}
+                              <div
                                 className="schedule-diary-card schedule-diary-written"
                               >
                                 <div className="schedule-diary-written-header">
                                   <div className="schedule-diary-written-title">
-                                    <BookOpen size={21} strokeWidth={2.4} />
+                                    <BookOpen size={17} strokeWidth={2.4} />
                                     나의 야구 일기
                                   </div>
                                   <div className="schedule-diary-written-meta">
                                     <span className="schedule-diary-attendance-badge">
-                                      <span style={{ fontSize: '13px' }}>{attendanceIcon}</span>
+                                      <span style={{ fontSize: '12px' }}>{attendanceIcon}</span>
                                       {attendanceLabel}
                                     </span>
                                     <div
@@ -654,7 +787,7 @@ export default function SchedulePage() {
                                       {Array.from({ length: 5 }).map((_, index) => (
                                         <Star
                                           key={index}
-                                          size={18}
+                                          size={15}
                                           fill={index < Math.round(selectedDiaryRecord.rating) ? '#FBBF24' : 'transparent'}
                                           color={index < Math.round(selectedDiaryRecord.rating) ? '#FBBF24' : '#FDE68A'}
                                           strokeWidth={2.4}
@@ -664,9 +797,9 @@ export default function SchedulePage() {
                                   </div>
                                 </div>
                                 <div className="schedule-diary-review-box">
-                                  &quot;{selectedDiaryRecord.review}&quot;
+                                  {selectedDiaryRecord.review}
                                 </div>
-                              </button>
+                              </div>
                             ) : (
                               <button
                                 onClick={() => setIsDiaryModalOpen(true)}
@@ -677,7 +810,7 @@ export default function SchedulePage() {
                                     <PenLine size={18} />
                                   </div>
                                   <div>
-                                    <p className="schedule-diary-empty-copy">아직 기록된 추억이 없어요 텅~</p>
+                                    <p className="schedule-diary-empty-copy">아직 기록된 추억이 없어요</p>
                                     <h4 className="schedule-diary-empty-title">야구 일기 작성하러 가기</h4>
                                   </div>
                                 </div>

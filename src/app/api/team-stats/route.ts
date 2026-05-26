@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import { KBO_TEAMS } from '@/data/teams';
-import { checkRateLimit, isValidTeamId } from '@/lib/apiSecurity';
+import { checkRateLimit, isValidSeasonYear, isValidTeamId } from '@/lib/apiSecurity';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { buildStandings, formatWinRate, getRank, type GameHistoryForStats } from '@/lib/teamStats';
 
 export const dynamic = 'force-dynamic';
 
+const CACHE_CONTROL = 'public, s-maxage=300, stale-while-revalidate=1800';
+
 export async function GET(request: Request) {
-  const rateLimit = checkRateLimit(request, 'team-stats');
+  const rateLimit = await checkRateLimit(request, 'team-stats');
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { success: false, message: '요청이 너무 많아요. 잠시 후 다시 시도해주세요.' },
@@ -20,7 +22,7 @@ export async function GET(request: Request) {
   const seasonYear = Number(searchParams.get('seasonYear') ?? new Date().getFullYear());
   const teamIds = KBO_TEAMS.map((team) => team.id);
 
-  if (!isValidTeamId(teamId, teamIds) || !Number.isInteger(seasonYear)) {
+  if (!isValidTeamId(teamId, teamIds) || !isValidSeasonYear(seasonYear)) {
     return NextResponse.json(
       { success: false, message: '잘못된 팀 정보입니다.' },
       { status: 400 }
@@ -78,7 +80,7 @@ export async function GET(request: Request) {
   const previousRank = previous ? getRank(previousStandings, teamId) : null;
   const delta = previous ? current.winRate - previous.winRate : 0;
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     success: true,
     stats: {
       seasonYear,
@@ -95,4 +97,6 @@ export async function GET(request: Request) {
       isPostseasonZone: rank > 0 && rank <= 5,
     },
   });
+  response.headers.set('Cache-Control', CACHE_CONTROL);
+  return response;
 }

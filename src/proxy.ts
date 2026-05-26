@@ -3,9 +3,18 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 const PUBLIC_PATH_PREFIXES = ['/login', '/signup', '/auth'];
 const TEAM_SETUP_PATH = '/teams';
+const DEFAULT_AUTH_REDIRECT_PATH = '/dashboard';
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function getSafeNextPath(value: string | null) {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+    return DEFAULT_AUTH_REDIRECT_PATH;
+  }
+
+  return value;
 }
 
 export async function proxy(request: NextRequest) {
@@ -59,8 +68,14 @@ export async function proxy(request: NextRequest) {
 
   if (user && (pathname === '/login' || pathname === '/signup')) {
     const targetUrl = request.nextUrl.clone();
-    targetUrl.pathname = hasCompletedSignup ? '/dashboard' : TEAM_SETUP_PATH;
+    const nextPath = getSafeNextPath(request.nextUrl.searchParams.get('next'));
+    targetUrl.pathname = hasCompletedSignup ? nextPath : TEAM_SETUP_PATH;
     targetUrl.search = '';
+
+    if (!hasCompletedSignup && nextPath !== DEFAULT_AUTH_REDIRECT_PATH) {
+      targetUrl.searchParams.set('next', nextPath);
+    }
+
     return NextResponse.redirect(targetUrl);
   }
 
@@ -68,6 +83,7 @@ export async function proxy(request: NextRequest) {
     const teamsUrl = request.nextUrl.clone();
     teamsUrl.pathname = TEAM_SETUP_PATH;
     teamsUrl.search = '';
+    teamsUrl.searchParams.set('next', `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(teamsUrl);
   }
 

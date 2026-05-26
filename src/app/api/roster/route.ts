@@ -5,7 +5,7 @@ import { checkRateLimit, isValidIsoDate, isValidTeamId } from '@/lib/apiSecurity
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  const rateLimit = checkRateLimit(request, 'roster');
+  const rateLimit = await checkRateLimit(request, 'roster');
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { success: false, message: '요청이 너무 많아요. 잠시 후 다시 시도해주세요.' },

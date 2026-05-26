@@ -6,7 +6,6 @@ import { getSupabaseServerClient } from '@/lib/supabase/server';
 export const dynamic = 'force-dynamic';
 
 const TEAM_BY_ID = Object.fromEntries(KBO_TEAMS.map((team) => [team.id, team.name]));
-
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const CACHE_CONTROL = 'public, s-maxage=300, stale-while-revalidate=1800';
 
@@ -34,17 +33,9 @@ type HistoryRow = {
   losing_pitcher_name: string | null;
 };
 
-type MissingResult = {
-  gameDate: string;
-  awayTeam: string;
-  homeTeam: string;
-  stadium: string;
-  reason: 'past_schedule_without_history';
-};
-
-function buildMonthRange(year: number, month: number) {
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-  const nextMonthDate = new Date(Date.UTC(year, month, 1));
+function buildSeasonRange(year: number, throughMonth: number) {
+  const startDate = `${year}-01-01`;
+  const nextMonthDate = new Date(Date.UTC(year, throughMonth, 1));
   const endDate = `${nextMonthDate.getUTCFullYear()}-${String(nextMonthDate.getUTCMonth() + 1).padStart(2, '0')}-01`;
 
   return { startDate, endDate };
@@ -77,16 +68,12 @@ function getKstToday() {
   }).format(new Date());
 }
 
-function isPastGameWithoutHistory(gameDate: string, history: HistoryRow | undefined, note: string | null | undefined) {
-  return gameDate < getKstToday() && !history && !note?.includes('취소');
-}
-
 function getGameKey(row: Pick<ScheduleRow, 'game_date' | 'home_team_id' | 'away_team_id'>) {
   return `${row.game_date}-${row.away_team_id}-${row.home_team_id}`;
 }
 
 export async function GET(request: Request) {
-  const rateLimit = await checkRateLimit(request, 'game-schedules-month');
+  const rateLimit = await checkRateLimit(request, 'game-schedules-season');
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { success: false, schedules: [], message: '요청이 너무 많아요. 잠시 후 다시 시도해주세요.' },
@@ -96,9 +83,16 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const year = Number(searchParams.get('year'));
-  const month = Number(searchParams.get('month'));
+  const throughMonth = Number(searchParams.get('throughMonth') ?? 12);
 
-  if (!Number.isInteger(year) || year < 2000 || year > 2100 || !Number.isInteger(month) || month < 1 || month > 12) {
+  if (
+    !Number.isInteger(year) ||
+    year < 2000 ||
+    year > 2100 ||
+    !Number.isInteger(throughMonth) ||
+    throughMonth < 1 ||
+    throughMonth > 12
+  ) {
     return NextResponse.json(
       { success: false, schedules: [], message: '잘못된 조회 기간입니다.' },
       { status: 400 }
@@ -113,7 +107,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const { startDate, endDate } = buildMonthRange(year, month);
+  const { startDate, endDate } = buildSeasonRange(year, throughMonth);
 
   const [{ data: scheduleRows, error: scheduleError }, { data: historyRows, error: historyError }] =
     await Promise.all([
@@ -134,37 +128,23 @@ export async function GET(request: Request) {
     ]);
 
   if (scheduleError || historyError) {
-    console.error('월간 대진표 DB 조회 실패:', scheduleError ?? historyError);
+    console.error('시즌 대진표 DB 조회 실패:', scheduleError ?? historyError);
     return NextResponse.json(
-      { success: false, schedules: [], message: '월간 대진표를 가져오지 못했습니다.' },
+      { success: false, schedules: [], message: '시즌 대진표를 가져오지 못했습니다.' },
       { status: 500 }
     );
   }
 
-  const historyMap = new Map(
-    ((historyRows ?? []) as HistoryRow[]).map((row) => [getGameKey(row), row])
-  );
-
-  const missingResults: MissingResult[] = [];
-
+  const today = getKstToday();
+  const historyMap = new Map(((historyRows ?? []) as HistoryRow[]).map((row) => [getGameKey(row), row]));
   const schedules = ((scheduleRows ?? []) as ScheduleRow[]).map((schedule) => {
     const history = historyMap.get(getGameKey(schedule));
     const awayTeam = TEAM_BY_ID[schedule.away_team_id] ?? schedule.away_team_id;
     const homeTeam = TEAM_BY_ID[schedule.home_team_id] ?? schedule.home_team_id;
     const date = toDateText(schedule.game_date);
     const note = history?.note && history.note !== '-' ? history.note : schedule.note;
-    const isMissingResult = isPastGameWithoutHistory(schedule.game_date, history, note);
+    const isMissingResult = schedule.game_date < today && !history && !note?.includes('취소');
     const status = note?.includes('취소') ? 'cancelled' : history?.status ?? (isMissingResult ? 'pending_result' : 'scheduled');
-
-    if (isMissingResult) {
-      missingResults.push({
-        gameDate: schedule.game_date,
-        awayTeam,
-        homeTeam,
-        stadium: schedule.stadium,
-        reason: 'past_schedule_without_history',
-      });
-    }
 
     return {
       day: `${date}(${toDayOfWeek(schedule.game_date)})`,
@@ -188,7 +168,6 @@ export async function GET(request: Request) {
   const response = NextResponse.json({
     success: true,
     schedules,
-    missingResults,
     source: 'db',
   });
   response.headers.set('Cache-Control', CACHE_CONTROL);

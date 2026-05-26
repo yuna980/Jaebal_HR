@@ -4,7 +4,7 @@ import { useTeam } from '@/context/TeamContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { BusFront, Check, ChevronRight, MapPin, Utensils } from 'lucide-react';
+import { BusFront, Check, ChevronRight, HeartPulse, MapPin, Utensils } from 'lucide-react';
 import { getTodayDateString } from '@/hooks/useKboSchedule';
 import { useGameScheduleMonth } from '@/hooks/useGameScheduleMonth';
 import { useTodayGameSchedule } from '@/hooks/useTodayGameSchedule';
@@ -503,6 +503,53 @@ function MatchupLineupCard({ game, leftTeam, rightTeam, lineup }: MatchupLineupC
   );
 }
 
+function HealingHomeLinkCard({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        marginTop: '-2px',
+        marginBottom: '16px',
+        padding: '16px 18px',
+        borderRadius: '20px',
+        background: '#FFFFFF',
+        border: '1px solid rgba(251, 113, 133, 0.16)',
+        boxShadow: '0 10px 24px rgba(15, 23, 42, 0.04)',
+        textAlign: 'left',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+        <div
+          style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '14px',
+            background: '#FFF1F2',
+            color: '#F43F5E',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <HeartPulse size={20} />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: '15px', fontWeight: 900, color: '#191F28', marginBottom: '3px' }}>심신 안정 목탁</div>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#8B95A1', lineHeight: 1.35 }}>경기 안 풀릴 때 가볍게 진정하기</div>
+        </div>
+      </div>
+      <ChevronRight size={18} color="#9AA4AF" />
+    </button>
+  );
+}
+
 interface RecentResultItem {
   result: string;
   opponent?: string;
@@ -691,16 +738,19 @@ export default function Dashboard() {
     today.getFullYear(),
     today.getMonth() + 1
   );
-  const { schedules: previousMonthSchedules } = useGameScheduleMonth(
-    previousMonth.getFullYear(),
-    previousMonth.getMonth() + 1
-  );
+  const [dashboardExtrasTeamId, setDashboardExtrasTeamId] = useState<string | null>(null);
   const [stadiumTip, setStadiumTip] = useState<StadiumTip | null>(null);
   const {
     schedule: todayGameSchedule,
     loading: todayGameScheduleLoading,
     error: todayGameScheduleError,
   } = useTodayGameSchedule(myTeam?.id);
+  const loadDashboardExtras = dashboardExtrasTeamId === myTeam?.id && !todayGameScheduleLoading;
+  const { schedules: previousMonthSchedules } = useGameScheduleMonth(
+    previousMonth.getFullYear(),
+    previousMonth.getMonth() + 1,
+    { enabled: loadDashboardExtras }
+  );
   const attendanceRecords = useAttendanceRecords();
   const previousSeasonYear = today.getFullYear() - 1;
   const todayStr = getTodayDateString();
@@ -709,7 +759,17 @@ export default function Dashboard() {
   );
   const todayGameDetailTeamId = shouldFetchTodayGameDetails ? myTeam?.id : undefined;
   const { lineup } = useKboLineup(todayGameDetailTeamId, shouldFetchTodayGameDetails ? todayStr : '');
-  const { roster } = useKboRoster(todayGameDetailTeamId);
+  const { roster } = useKboRoster(loadDashboardExtras ? todayGameDetailTeamId : undefined);
+
+  useEffect(() => {
+    if (!myTeam?.id || todayGameScheduleLoading) {
+      return;
+    }
+
+    const nextTeamId = myTeam.id;
+    const timeoutId = window.setTimeout(() => setDashboardExtrasTeamId(nextTeamId), 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [myTeam?.id, todayGameScheduleLoading]);
 
   useEffect(() => {
     if (!todayGameSchedule?.stadium || todayGameSchedule.status === 'cancelled') {
@@ -754,7 +814,11 @@ export default function Dashboard() {
   const {
     record: lastSeasonHeadToHeadRecord,
     loading: headToHeadLoading,
-  } = useHeadToHeadRecord(myTeam?.id, opponentTeamId, previousSeasonYear);
+  } = useHeadToHeadRecord(
+    loadDashboardExtras ? myTeam?.id : undefined,
+    loadDashboardExtras ? opponentTeamId : undefined,
+    previousSeasonYear
+  );
 
   if (!myTeam) return null;
   const todayFullDate = formatDiaryDate(today.getFullYear(), todayStr);
@@ -1077,6 +1141,8 @@ export default function Dashboard() {
               lineup={lineup}
             />
           )}
+
+          {myTeamGame.status !== 'cancelled' && <HealingHomeLinkCard onOpen={() => router.push('/healing')} />}
 
           {/* Roster Changes */}
           {roster && (roster.callUps.length > 0 || roster.sendDowns.length > 0) && (

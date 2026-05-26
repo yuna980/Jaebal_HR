@@ -1,6 +1,10 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import type { AnyNode } from 'domhandler';
+import { runWithConcurrencyLimit } from '@/lib/requestCache';
+
+const KBO_REQUEST_TIMEOUT_MS = 8000;
+const KBO_DAILY_DETAIL_CONCURRENCY = 4;
 
 export interface KboMatch {
   /** 날짜 원본 문자열. 예: "04.16(목)" */
@@ -219,10 +223,11 @@ function parsePitcherRecord(
   if (!name) return null;
 
   const winLossMatch = stripHtml(cells[0]?.Text).match(/시즌\s+(.+)$/);
+  const seasonWinLoss = winLossMatch?.[1]?.split(/\s+VS\s+/i)[0]?.trim();
 
   return {
     name,
-    winLoss: winLossMatch?.[1]?.trim() ?? '-',
+    winLoss: seasonWinLoss || '-',
     era: stripHtml(cells[1]?.Text) || '-',
     war: stripHtml(cells[2]?.Text) || '-',
     games: stripHtml(cells[3]?.Text) || '-',
@@ -250,7 +255,7 @@ function buildDetailKey(date: string, awayTeam: string, homeTeam: string) {
 
 async function fetchMonthlyGameDetails(year: number, month: number) {
   const daysInMonth = new Date(year, month, 0).getDate();
-  const requests = Array.from({ length: daysInMonth }, (_, index) => {
+  const requests = Array.from({ length: daysInMonth }, (_, index) => async () => {
     const date = `${year}${String(month).padStart(2, '0')}${String(index + 1).padStart(2, '0')}`;
     const form = new URLSearchParams();
     form.append('leId', '1');
@@ -262,12 +267,13 @@ async function fetchMonthlyGameDetails(year: number, month: number) {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
+        timeout: KBO_REQUEST_TIMEOUT_MS,
       })
       .then((response) => response.data?.game ?? [])
       .catch(() => []);
   });
 
-  const detailLists = await Promise.all(requests);
+  const detailLists = await runWithConcurrencyLimit(requests, KBO_DAILY_DETAIL_CONCURRENCY);
   const detailMap = new Map<string, KboGameListItem>();
 
   detailLists.flat().forEach((game) => {
@@ -357,7 +363,8 @@ export async function fetchKboSchedule(
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Referer': 'https://www.koreabaseball.com/Schedule/Schedule.aspx'
-        }
+        },
+        timeout: KBO_REQUEST_TIMEOUT_MS,
       }
     );
 
@@ -459,6 +466,7 @@ export async function fetchKboLineup(teamId: string, dateParam: string): Promise
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
+        timeout: KBO_REQUEST_TIMEOUT_MS,
       }
     );
 
@@ -488,6 +496,7 @@ export async function fetchKboLineup(teamId: string, dateParam: string): Promise
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         },
+        timeout: KBO_REQUEST_TIMEOUT_MS,
       }
     );
 
@@ -533,6 +542,7 @@ export async function fetchKboLineup(teamId: string, dateParam: string): Promise
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         },
+        timeout: KBO_REQUEST_TIMEOUT_MS,
       }
     );
 
@@ -601,7 +611,7 @@ export async function fetchKboRoster(teamId: string, date = new Date()): Promise
     if (!kboTeamId) return emptyResult;
 
     const registerUrl = 'https://www.koreabaseball.com/Player/Register.aspx';
-    const initialHtml = (await axios.get(registerUrl)).data;
+    const initialHtml = (await axios.get(registerUrl, { timeout: KBO_REQUEST_TIMEOUT_MS })).data;
     const $initial = cheerio.load(initialHtml);
     const { viewState, viewStateGenerator } = extractViewState($initial);
 
@@ -626,6 +636,7 @@ export async function fetchKboRoster(teamId: string, date = new Date()): Promise
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
+        timeout: KBO_REQUEST_TIMEOUT_MS,
       })
     ).data;
 

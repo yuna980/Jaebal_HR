@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
-import { checkRateLimit } from '@/lib/apiSecurity';
+import { KBO_TEAMS } from '@/data/teams';
+import { checkRateLimit, isValidSeasonYear, isValidTeamId } from '@/lib/apiSecurity';
 import { buildHeadToHeadRecord, fetchHeadToHeadRecordFromKbo } from '@/lib/gameRecords';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  const rateLimit = checkRateLimit(request, 'game-histories-head-to-head');
+  const rateLimit = await checkRateLimit(request, 'game-histories-head-to-head');
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { success: false, record: null, message: '요청이 너무 많아요. 잠시 후 다시 시도해주세요.' },
@@ -18,8 +19,15 @@ export async function GET(request: Request) {
   const teamId = searchParams.get('teamId');
   const opponentTeamId = searchParams.get('opponentTeamId');
   const seasonYearParam = Number(searchParams.get('seasonYear'));
+  const teamIds = KBO_TEAMS.map((team) => team.id);
 
-  if (!teamId || !opponentTeamId || !Number.isInteger(seasonYearParam)) {
+  if (
+    !teamId ||
+    !opponentTeamId ||
+    !isValidTeamId(teamId, teamIds) ||
+    !isValidTeamId(opponentTeamId, teamIds) ||
+    !isValidSeasonYear(seasonYearParam)
+  ) {
     return NextResponse.json(
       { success: false, record: null, message: '잘못된 조회 조건입니다.' },
       { status: 400 }

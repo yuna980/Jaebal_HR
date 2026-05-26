@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   AlertTriangle,
   ArrowDown,
@@ -171,7 +172,7 @@ function TeamStatsDashboard({
   const trend = getTrendMeta(stats);
 
   return (
-    <section style={{ marginBottom: '28px' }}>
+    <section id="baseball-diary" style={{ marginBottom: '28px', scrollMarginTop: '18px' }}>
       <div
         style={{
           background: '#FFFFFF',
@@ -1427,24 +1428,20 @@ function QuickLinksSection({
   team: Team;
   serviceLinks: QuickLinkItem[];
 }) {
-  const renderItem = (item: QuickLinkItem) => (
-    <a
-      key={item.label}
-      href={item.url}
-      target="_blank"
-      rel="noreferrer"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '12px',
-        background: '#FFFFFF',
-        borderRadius: '20px',
-        padding: '16px 18px',
-        boxShadow: '0 10px 24px rgba(15, 23, 42, 0.04)',
-        border: '1px solid rgba(139, 149, 161, 0.1)',
-      }}
-    >
+  const itemStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    background: '#FFFFFF',
+    borderRadius: '20px',
+    padding: '16px 18px',
+    boxShadow: '0 10px 24px rgba(15, 23, 42, 0.04)',
+    border: '1px solid rgba(139, 149, 161, 0.1)',
+  };
+
+  const renderItemContent = (item: QuickLinkItem) => (
+    <>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div
           style={{
@@ -1467,8 +1464,19 @@ function QuickLinksSection({
         </div>
       </div>
       <ChevronRight size={18} color="#9AA4AF" />
-    </a>
+    </>
   );
+
+  const renderItem = (item: QuickLinkItem) =>
+    item.url.startsWith('/') ? (
+      <Link key={item.label} href={item.url} style={itemStyle}>
+        {renderItemContent(item)}
+      </Link>
+    ) : (
+      <a key={item.label} href={item.url} target="_blank" rel="noreferrer" style={itemStyle}>
+        {renderItemContent(item)}
+      </a>
+    );
 
   return (
     <section>
@@ -1510,24 +1518,16 @@ export default function ProfilePage() {
     let cancelled = false;
 
     async function fetchSeasonSchedules() {
-      const months = Array.from({ length: currentMonth }, (_, index) => index + 1);
-
       try {
-        const monthSchedules = await Promise.all(
-          months.map(async (month) => {
-            const params = new URLSearchParams({
-              year: String(currentYear),
-              month: String(month),
-            });
-            const response = await fetch(`/api/game-schedules/month?${params.toString()}`);
-            const data = await response.json();
-
-            return data.success ? (data.schedules as KboMatch[]) : [];
-          })
-        );
+        const params = new URLSearchParams({
+          year: String(currentYear),
+          throughMonth: String(currentMonth),
+        });
+        const response = await fetch(`/api/game-schedules/season?${params.toString()}`);
+        const data = await response.json();
 
         if (!cancelled) {
-          setSeasonSchedules(monthSchedules.flat());
+          setSeasonSchedules(data.success ? (data.schedules as KboMatch[]) : schedules);
         }
       } catch {
         if (!cancelled) {
@@ -1669,6 +1669,12 @@ export default function ProfilePage() {
   };
 
   const serviceLinks: QuickLinkItem[] = [
+    {
+      label: '심신 안정 목탁',
+      description: '경기 안 풀릴 때 가볍게 진정하기',
+      url: '/healing',
+      emoji: '🧘',
+    },
     {
       label: `${myTeam.fullName} 굿즈샵`,
       description: '유니폼, 모자, 응원용품 보러가기',

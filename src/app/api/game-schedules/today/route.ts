@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { KBO_TEAMS } from '@/data/teams';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
-import { checkRateLimit } from '@/lib/apiSecurity';
+import { checkRateLimit, isValidIsoDate, isValidTeamId } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +26,7 @@ function isPastDate(date: string) {
 }
 
 export async function GET(request: Request) {
-  const rateLimit = checkRateLimit(request, 'game-schedules-today');
+  const rateLimit = await checkRateLimit(request, 'game-schedules-today');
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { success: false, schedule: null, message: '요청이 너무 많아요. 잠시 후 다시 시도해주세요.' },
@@ -35,12 +35,20 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const teamId = searchParams.get('teamId');
+  const teamId = searchParams.get('teamId') ?? '';
   const date = searchParams.get('date') ?? getKstToday();
+  const teamIds = KBO_TEAMS.map((team) => team.id);
 
-  if (!teamId) {
+  if (!isValidTeamId(teamId, teamIds)) {
     return NextResponse.json(
-      { success: false, schedule: null, message: '팀 정보가 필요합니다.' },
+      { success: false, schedule: null, message: '잘못된 팀 정보입니다.' },
+      { status: 400 }
+    );
+  }
+
+  if (!isValidIsoDate(date)) {
+    return NextResponse.json(
+      { success: false, schedule: null, message: '잘못된 날짜 형식입니다.' },
       { status: 400 }
     );
   }

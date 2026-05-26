@@ -51,6 +51,16 @@ function getFriendlyAuthError(message: string) {
   return '잠시 후 다시 시도해 주세요.';
 }
 
+function getSafeNextPath() {
+  const next = new URLSearchParams(window.location.search).get('next');
+
+  if (!next || !next.startsWith('/') || next.startsWith('//')) {
+    return '/dashboard';
+  }
+
+  return next;
+}
+
 export default function AuthForm({ mode }: AuthFormProps) {
   const copy = authCopy[mode];
   const [email, setEmail] = useState('');
@@ -95,7 +105,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           rememberAuthenticatedUser(data.user.id);
         }
 
-        window.location.replace('/dashboard');
+        window.location.replace(getSafeNextPath());
         return;
       }
 

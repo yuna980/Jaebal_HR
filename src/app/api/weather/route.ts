@@ -17,6 +17,7 @@ interface WeatherCacheValue {
 }
 
 const WEATHER_CACHE_TTL_MS = 5 * 60 * 1000;
+const WEATHER_REQUEST_TIMEOUT_MS = 5000;
 const weatherCache = new Map<string, WeatherCacheValue>();
 
 function getAirQualityLabel(pm10: number | null) {
@@ -72,12 +73,14 @@ export async function GET(request: Request) {
           'User-Agent': 'Mozilla/5.0',
         },
         cache: 'no-store',
+        signal: AbortSignal.timeout(WEATHER_REQUEST_TIMEOUT_MS),
       }),
       fetch(airQualityUrl.toString(), {
         headers: {
           'User-Agent': 'Mozilla/5.0',
         },
         cache: 'no-store',
+        signal: AbortSignal.timeout(WEATHER_REQUEST_TIMEOUT_MS),
       }),
     ]);
 
