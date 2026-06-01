@@ -20,6 +20,12 @@ export default function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { myTeam } = useTeam();
+  const shouldHideNav =
+    pathname === '/' ||
+    pathname === '/teams' ||
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/signup') ||
+    pathname.startsWith('/auth');
 
   const prefetchDashboardData = useCallback(() => {
     const today = new Date();
@@ -28,13 +34,15 @@ export default function BottomNav() {
   }, [myTeam?.id]);
 
   useEffect(() => {
+    if (shouldHideNav || !myTeam) return;
+
     NAV_ITEMS.forEach((item) => router.prefetch(item.href));
 
     const timeoutId = window.setTimeout(prefetchDashboardData, 300);
     return () => window.clearTimeout(timeoutId);
-  }, [prefetchDashboardData, router]);
+  }, [myTeam, prefetchDashboardData, router, shouldHideNav]);
 
-  if (pathname === '/' || pathname === '/teams' || pathname.startsWith('/login') || pathname.startsWith('/signup') || pathname.startsWith('/auth')) return null;
+  if (shouldHideNav) return null;
 
   return (
     <nav className="bottom-nav">

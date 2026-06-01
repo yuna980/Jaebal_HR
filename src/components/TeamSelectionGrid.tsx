@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Check, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { KBO_TEAMS, Team } from '@/data/teams';
@@ -116,7 +115,6 @@ export default function TeamSelectionGrid({
   userId = null,
 }: TeamSelectionGridProps) {
   const { myTeam, selectTeam } = useTeam();
-  const router = useRouter();
   const [selectedTeamId, setSelectedTeamId] = useState(myTeam?.id ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -135,8 +133,7 @@ export default function TeamSelectionGrid({
 
     try {
       await selectTeam(selectedTeam.id, userId);
-      router.replace(redirectTo);
-      router.refresh();
+      window.location.replace(redirectTo);
     } catch (error) {
       console.warn('응원팀 저장 실패:', error);
       setSaveError('응원팀 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
