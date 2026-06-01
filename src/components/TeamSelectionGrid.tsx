@@ -119,6 +119,7 @@ export default function TeamSelectionGrid({
   const router = useRouter();
   const [selectedTeamId, setSelectedTeamId] = useState(myTeam?.id ?? '');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const selectedTeam = useMemo(
     () => KBO_TEAMS.find((team) => team.id === selectedTeamId) ?? null,
@@ -130,9 +131,17 @@ export default function TeamSelectionGrid({
     if (!selectedTeam || isSaving) return;
 
     setIsSaving(true);
-    await selectTeam(selectedTeam.id, userId);
-    router.replace(redirectTo);
-    router.refresh();
+    setSaveError('');
+
+    try {
+      await selectTeam(selectedTeam.id, userId);
+      router.replace(redirectTo);
+      router.refresh();
+    } catch (error) {
+      console.warn('응원팀 저장 실패:', error);
+      setSaveError('응원팀 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -250,7 +259,10 @@ export default function TeamSelectionGrid({
                   duration: 0.34,
                   ease: [0.22, 1, 0.36, 1],
                 }}
-                onClick={() => setSelectedTeamId(team.id)}
+                onClick={() => {
+                  setSelectedTeamId(team.id);
+                  setSaveError('');
+                }}
                 aria-pressed={isSelected}
                 style={{
                   minHeight: '124px',
@@ -381,6 +393,20 @@ export default function TeamSelectionGrid({
           boxShadow: '0 -16px 38px rgba(15, 23, 42, 0.08)',
         }}
       >
+        {saveError && (
+          <p
+            role="alert"
+            style={{
+              margin: '0 0 10px',
+              color: '#E11D48',
+              fontSize: '13px',
+              fontWeight: 800,
+              textAlign: 'center',
+            }}
+          >
+            {saveError}
+          </p>
+        )}
         <button
           type="button"
           className="team-choice-cta"
