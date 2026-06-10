@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "verify:logic": "tsx scripts/verify-game-status-normalization.ts && tsx scripts/verify-draw-pitcher-display.ts && tsx scripts/verify-schedule-calendar-view.ts && tsx scripts/verify-healing-center.ts && node scripts/verify-optimization-helpers.mjs",
+    "verify:e2e:auth-team": "tsx scripts/verify-auth-team-flow.ts",
     "verify": "npm run verify:logic && npm run lint && npm run build"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "playwright": "^1.60.0",
     "tsx": "^4.22.4",
     "typescript": "^5"
   },
