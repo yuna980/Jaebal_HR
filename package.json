@@ -9,7 +9,7 @@
     "check:sync": "tsx scripts/check-sync-status.ts",
     "start": "next start",
     "lint": "eslint",
-    "verify:logic": "tsx scripts/verify-game-status-normalization.ts && tsx scripts/verify-kbo-record-validation.ts && tsx scripts/verify-error-log-helpers.ts && tsx scripts/verify-today-schedule-cache-policy.ts && tsx scripts/verify-draw-pitcher-display.ts && tsx scripts/verify-schedule-calendar-view.ts && tsx scripts/verify-healing-center.ts && node scripts/verify-optimization-helpers.mjs",
+    "verify:logic": "tsx scripts/verify-game-status-normalization.ts && tsx scripts/verify-kbo-record-validation.ts && tsx scripts/verify-error-log-helpers.ts && tsx scripts/verify-security-headers.ts && tsx scripts/verify-today-schedule-cache-policy.ts && tsx scripts/verify-draw-pitcher-display.ts && tsx scripts/verify-schedule-calendar-view.ts && tsx scripts/verify-healing-center.ts && node scripts/verify-optimization-helpers.mjs",
     "verify:e2e:auth-team": "tsx scripts/verify-auth-team-flow.ts",
     "verify": "npm run verify:logic && npm run lint && npm run build"
   },
