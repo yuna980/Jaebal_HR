@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "check:sync": "tsx scripts/check-sync-status.ts",
     "start": "next start",
     "lint": "eslint",
     "verify:logic": "tsx scripts/verify-game-status-normalization.ts && tsx scripts/verify-draw-pitcher-display.ts && tsx scripts/verify-schedule-calendar-view.ts && tsx scripts/verify-healing-center.ts && node scripts/verify-optimization-helpers.mjs",

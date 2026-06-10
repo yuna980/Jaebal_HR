@@ -146,6 +146,26 @@ create table if not exists public.game_lineups (
   unique (season_year, game_date, home_team_id, away_team_id)
 );
 
+create table if not exists public.kbo_sync_runs (
+  id bigserial primary key,
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  mode text not null check (mode in ('daily', 'backfill')),
+  status text not null default 'started' check (status in ('started', 'success', 'failed')),
+  dry_run boolean not null default false,
+  seasons integer[] not null default '{}',
+  total_processed integer not null default 0,
+  total_saved integer not null default 0,
+  summaries jsonb not null default '[]'::jsonb,
+  error_message text
+);
+
+create index if not exists kbo_sync_runs_started_at_idx
+on public.kbo_sync_runs (started_at desc);
+
+create index if not exists kbo_sync_runs_status_started_at_idx
+on public.kbo_sync_runs (status, started_at desc);
+
 create table if not exists public.stadiums (
   id bigint generated always as identity primary key,
   stadium_name text not null unique,
@@ -247,6 +267,7 @@ alter table public.api_rate_limits enable row level security;
 alter table public.game_histories enable row level security;
 alter table public.game_schedules enable row level security;
 alter table public.game_lineups enable row level security;
+alter table public.kbo_sync_runs enable row level security;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
@@ -483,6 +504,34 @@ $$;
 
 revoke all on function public.delete_current_user() from public;
 grant execute on function public.delete_current_user() to authenticated;
+
+create or replace function public.get_game_result_sync_gaps(limit_count integer default 10)
+returns table (
+  season_year integer,
+  game_date date,
+  away_team_id text,
+  home_team_id text,
+  stadium text
+)
+language sql
+security definer
+set search_path = internal, public
+as $$
+  select
+    gaps.season_year,
+    gaps.game_date,
+    gaps.away_team_id,
+    gaps.home_team_id,
+    gaps.stadium
+  from internal.game_result_sync_gaps gaps
+  order by gaps.game_date desc
+  limit greatest(0, least(limit_count, 100));
+$$;
+
+revoke all on function public.get_game_result_sync_gaps(integer) from public;
+revoke all on function public.get_game_result_sync_gaps(integer) from anon;
+revoke all on function public.get_game_result_sync_gaps(integer) from authenticated;
+grant execute on function public.get_game_result_sync_gaps(integer) to service_role;
 
 drop trigger if exists handle_fan_diaries_updated_at on public.fan_diaries;
 create trigger handle_fan_diaries_updated_at

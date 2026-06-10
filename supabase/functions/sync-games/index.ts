@@ -18,6 +18,14 @@ interface SyncSummary {
   saved: number;
 }
 
+interface SyncRunUpdate {
+  status: "success" | "failed";
+  totalProcessed: number;
+  totalSaved: number;
+  summaries: SyncSummary[];
+  errorMessage?: string;
+}
+
 const corsHeaders = {
   "Content-Type": "application/json",
 };
@@ -81,6 +89,53 @@ function isHistoryEligible(status: string) {
   return status === "finished" || status === "cancelled";
 }
 
+async function createSyncRun(
+  supabase: ReturnType<typeof createClient>,
+  params: { mode: SyncMode; dryRun: boolean; seasons: number[] },
+) {
+  const { data, error } = await supabase
+    .from("kbo_sync_runs")
+    .insert({
+      mode: params.mode,
+      dry_run: params.dryRun,
+      seasons: params.seasons,
+      status: "started",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("kbo_sync_runs insert failed", error);
+    return null;
+  }
+
+  return data?.id as number | null;
+}
+
+async function finishSyncRun(
+  supabase: ReturnType<typeof createClient>,
+  runId: number | null,
+  update: SyncRunUpdate,
+) {
+  if (!runId) return;
+
+  const { error } = await supabase
+    .from("kbo_sync_runs")
+    .update({
+      status: update.status,
+      finished_at: new Date().toISOString(),
+      total_processed: update.totalProcessed,
+      total_saved: update.totalSaved,
+      summaries: update.summaries,
+      error_message: update.errorMessage ?? null,
+    })
+    .eq("id", runId);
+
+  if (error) {
+    console.error("kbo_sync_runs update failed", error);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return json(405, { success: false, message: "POST 요청만 지원합니다." });
@@ -117,65 +172,107 @@ Deno.serve(async (req) => {
 
   const summaries: SyncSummary[] = [];
   let totalProcessed = 0;
+  let totalSaved = 0;
+  const runId = await createSyncRun(supabase, {
+    mode,
+    dryRun: Boolean(body.dryRun),
+    seasons,
+  });
 
-  for (const seasonYear of seasons) {
-    const months = getMonthsForSeason(mode, seasonYear, body.monthsBySeason);
+  try {
+    for (const seasonYear of seasons) {
+      const months = getMonthsForSeason(mode, seasonYear, body.monthsBySeason);
 
-    for (const month of months) {
-      const games = await fetchRegularSeasonGames(seasonYear, month);
-      totalProcessed += games.length;
-      const completedGames = games.filter((game) => isHistoryEligible(game.status));
-      summaries.push({
-        seasonYear,
-        month,
-        processed: games.length,
-        saved: completedGames.length,
-      });
-
-      if (body.dryRun || completedGames.length === 0) {
-        continue;
-      }
-
-      const payload = dedupeGames(
-        completedGames.map((game) => ({
-          season_year: game.seasonYear,
-          game_date: game.gameDate,
-          home_team_id: game.homeTeamId,
-          away_team_id: game.awayTeamId,
-          stadium: game.stadium,
-          home_score: game.homeScore,
-          away_score: game.awayScore,
-          status: game.status,
-          note: game.note,
-          winning_pitcher_name: game.winningPitcherName,
-          losing_pitcher_name: game.losingPitcherName,
-          last_synced_at: new Date().toISOString(),
-        })),
-      );
-
-      for (const batch of chunk(payload, 200)) {
-        const { error } = await supabase.from("game_histories").upsert(batch, {
-          onConflict: "season_year,game_date,home_team_id,away_team_id",
+      for (const month of months) {
+        const games = await fetchRegularSeasonGames(seasonYear, month);
+        totalProcessed += games.length;
+        const completedGames = games.filter((game) => isHistoryEligible(game.status));
+        const saved = body.dryRun ? 0 : completedGames.length;
+        totalSaved += saved;
+        summaries.push({
+          seasonYear,
+          month,
+          processed: games.length,
+          saved,
         });
 
-        if (error) {
-          console.error("game_histories upsert failed", error);
-          return json(500, {
-            success: false,
-            message: "경기 데이터 저장 중 오류가 발생했습니다.",
-            error: error.message,
-            summaries,
+        if (body.dryRun || completedGames.length === 0) {
+          continue;
+        }
+
+        const payload = dedupeGames(
+          completedGames.map((game) => ({
+            season_year: game.seasonYear,
+            game_date: game.gameDate,
+            home_team_id: game.homeTeamId,
+            away_team_id: game.awayTeamId,
+            stadium: game.stadium,
+            home_score: game.homeScore,
+            away_score: game.awayScore,
+            status: game.status,
+            note: game.note,
+            winning_pitcher_name: game.winningPitcherName,
+            losing_pitcher_name: game.losingPitcherName,
+            last_synced_at: new Date().toISOString(),
+          })),
+        );
+
+        for (const batch of chunk(payload, 200)) {
+          const { error } = await supabase.from("game_histories").upsert(batch, {
+            onConflict: "season_year,game_date,home_team_id,away_team_id",
           });
+
+          if (error) {
+            console.error("game_histories upsert failed", error);
+            await finishSyncRun(supabase, runId, {
+              status: "failed",
+              totalProcessed,
+              totalSaved,
+              summaries,
+              errorMessage: error.message,
+            });
+            return json(500, {
+              success: false,
+              message: "경기 데이터 저장 중 오류가 발생했습니다.",
+              error: error.message,
+              summaries,
+            });
+          }
         }
       }
     }
-  }
 
-  return json(200, {
-    success: true,
-    mode,
-    seasons,
-    totalProcessed,
-    summaries,
-  });
+    await finishSyncRun(supabase, runId, {
+      status: "success",
+      totalProcessed,
+      totalSaved,
+      summaries,
+    });
+
+    return json(200, {
+      success: true,
+      mode,
+      seasons,
+      totalProcessed,
+      totalSaved,
+      summaries,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "알 수 없는 동기화 오류";
+    console.error("sync-games failed", error);
+    await finishSyncRun(supabase, runId, {
+      status: "failed",
+      totalProcessed,
+      totalSaved,
+      summaries,
+      errorMessage: message,
+    });
+
+    return json(500, {
+      success: false,
+      message: "경기 데이터 동기화 중 오류가 발생했습니다.",
+      error: message,
+      summaries,
+    });
+  }
 });
