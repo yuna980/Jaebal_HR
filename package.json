@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify:logic": "tsx scripts/verify-game-status-normalization.ts && tsx scripts/verify-draw-pitcher-display.ts && tsx scripts/verify-schedule-calendar-view.ts && tsx scripts/verify-healing-center.ts && node scripts/verify-optimization-helpers.mjs",
+    "verify": "npm run verify:logic && npm run lint && npm run build"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
@@ -27,6 +29,7 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "tsx": "^4.22.4",
     "typescript": "^5"
   },
   "overrides": {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { KBO_TEAMS } from '@/data/teams';
 import { checkRateLimit } from '@/lib/apiSecurity';
+import { normalizeScheduleStatus } from '@/lib/gameStatus';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -77,30 +78,6 @@ function getKstToday() {
   }).format(new Date());
 }
 
-function isPastGameWithoutHistory(gameDate: string, history: HistoryRow | undefined, note: string | null | undefined) {
-  return gameDate < getKstToday() && !history && !note?.includes('취소');
-}
-
-function hasCompleteScore(history: HistoryRow | undefined) {
-  return Boolean(
-    history &&
-      typeof history.away_score === 'number' &&
-      typeof history.home_score === 'number'
-  );
-}
-
-function isReliableFinishedHistory(gameDate: string, history: HistoryRow | undefined) {
-  if (!history || history.status !== 'finished' || !hasCompleteScore(history)) {
-    return false;
-  }
-
-  if (history.away_score === history.home_score || gameDate < getKstToday()) {
-    return true;
-  }
-
-  return Boolean(history.winning_pitcher_name && history.losing_pitcher_name);
-}
-
 function getGameKey(row: Pick<ScheduleRow, 'game_date' | 'home_team_id' | 'away_team_id'>) {
   return `${row.game_date}-${row.away_team_id}-${row.home_team_id}`;
 }
@@ -165,6 +142,7 @@ export async function GET(request: Request) {
     ((historyRows ?? []) as HistoryRow[]).map((row) => [getGameKey(row), row])
   );
 
+  const today = getKstToday();
   const missingResults: MissingResult[] = [];
 
   const schedules = ((scheduleRows ?? []) as ScheduleRow[]).map((schedule) => {
@@ -173,14 +151,21 @@ export async function GET(request: Request) {
     const homeTeam = TEAM_BY_ID[schedule.home_team_id] ?? schedule.home_team_id;
     const date = toDateText(schedule.game_date);
     const note = history?.note && history.note !== '-' ? history.note : schedule.note;
-    const isMissingResult = isPastGameWithoutHistory(schedule.game_date, history, note);
-    const status = note?.includes('취소')
-      ? 'cancelled'
-      : isReliableFinishedHistory(schedule.game_date, history)
-        ? 'finished'
-        : isMissingResult
-          ? 'pending_result'
-          : 'scheduled';
+    const status = normalizeScheduleStatus({
+      gameDate: schedule.game_date,
+      history: history
+        ? {
+            status: history.status,
+            awayScore: history.away_score,
+            homeScore: history.home_score,
+            winningPitcherName: history.winning_pitcher_name,
+            losingPitcherName: history.losing_pitcher_name,
+          }
+        : null,
+      note,
+      today,
+    });
+    const isMissingResult = status === 'pending_result';
 
     if (isMissingResult) {
       missingResults.push({

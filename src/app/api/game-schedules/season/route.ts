@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { KBO_TEAMS } from '@/data/teams';
 import { checkRateLimit } from '@/lib/apiSecurity';
+import { normalizeScheduleStatus } from '@/lib/gameStatus';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -66,26 +67,6 @@ function getKstToday() {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date());
-}
-
-function hasCompleteScore(history: HistoryRow | undefined) {
-  return Boolean(
-    history &&
-      typeof history.away_score === 'number' &&
-      typeof history.home_score === 'number'
-  );
-}
-
-function isReliableFinishedHistory(gameDate: string, history: HistoryRow | undefined, today: string) {
-  if (!history || history.status !== 'finished' || !hasCompleteScore(history)) {
-    return false;
-  }
-
-  if (history.away_score === history.home_score || gameDate < today) {
-    return true;
-  }
-
-  return Boolean(history.winning_pitcher_name && history.losing_pitcher_name);
 }
 
 function getGameKey(row: Pick<ScheduleRow, 'game_date' | 'home_team_id' | 'away_team_id'>) {
@@ -163,14 +144,20 @@ export async function GET(request: Request) {
     const homeTeam = TEAM_BY_ID[schedule.home_team_id] ?? schedule.home_team_id;
     const date = toDateText(schedule.game_date);
     const note = history?.note && history.note !== '-' ? history.note : schedule.note;
-    const isMissingResult = schedule.game_date < today && !history && !note?.includes('취소');
-    const status = note?.includes('취소')
-      ? 'cancelled'
-      : isReliableFinishedHistory(schedule.game_date, history, today)
-        ? 'finished'
-        : isMissingResult
-          ? 'pending_result'
-          : 'scheduled';
+    const status = normalizeScheduleStatus({
+      gameDate: schedule.game_date,
+      history: history
+        ? {
+            status: history.status,
+            awayScore: history.away_score,
+            homeScore: history.home_score,
+            winningPitcherName: history.winning_pitcher_name,
+            losingPitcherName: history.losing_pitcher_name,
+          }
+        : null,
+      note,
+      today,
+    });
 
     return {
       day: `${date}(${toDayOfWeek(schedule.game_date)})`,
