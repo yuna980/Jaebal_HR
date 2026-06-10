@@ -14,7 +14,7 @@ type TodayScheduleCacheEntry = {
   savedAt: number;
 };
 
-const TODAY_SCHEDULE_CACHE_KEY = 'game-schedule-today-cache';
+const TODAY_SCHEDULE_CACHE_KEY = 'game-schedule-today-cache-v2';
 const TODAY_SCHEDULE_CACHE_TTL_MS = 5 * 60 * 1000;
 const memoryCache = new Map<string, TodayScheduleCacheEntry>();
 const inflightRequests = new Map<string, Promise<KboMatch | null>>();
