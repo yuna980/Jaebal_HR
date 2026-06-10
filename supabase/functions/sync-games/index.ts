@@ -1,6 +1,10 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { fetchRegularSeasonGames } from "../_shared/kbo.ts";
+import {
+  fetchRegularSeasonGames,
+  validateKboGameRecord,
+  type KboGameRecord,
+} from "../_shared/kbo.ts";
 
 type SyncMode = "backfill" | "daily";
 
@@ -16,12 +20,23 @@ interface SyncSummary {
   month: number;
   processed: number;
   saved: number;
+  invalid: number;
+}
+
+interface InvalidGameSample {
+  seasonYear: number;
+  gameDate: string;
+  awayTeamId: string;
+  homeTeamId: string;
+  reason: string;
 }
 
 interface SyncRunUpdate {
   status: "success" | "failed";
   totalProcessed: number;
   totalSaved: number;
+  totalInvalid: number;
+  invalidSamples: InvalidGameSample[];
   summaries: SyncSummary[];
   errorMessage?: string;
 }
@@ -89,6 +104,35 @@ function isHistoryEligible(status: string) {
   return status === "finished" || status === "cancelled";
 }
 
+function filterValidGames(games: KboGameRecord[]) {
+  const validGames: KboGameRecord[] = [];
+  const invalidSamples: InvalidGameSample[] = [];
+  let invalidCount = 0;
+
+  for (const game of games) {
+    const validation = validateKboGameRecord(game);
+
+    if (validation.valid) {
+      validGames.push(game);
+      continue;
+    }
+
+    invalidCount += 1;
+
+    if (invalidSamples.length < 20) {
+      invalidSamples.push({
+        seasonYear: game.seasonYear,
+        gameDate: game.gameDate,
+        awayTeamId: game.awayTeamId,
+        homeTeamId: game.homeTeamId,
+        reason: validation.reason,
+      });
+    }
+  }
+
+  return { validGames, invalidCount, invalidSamples };
+}
+
 async function createSyncRun(
   supabase: ReturnType<typeof createClient>,
   params: { mode: SyncMode; dryRun: boolean; seasons: number[] },
@@ -126,6 +170,8 @@ async function finishSyncRun(
       finished_at: new Date().toISOString(),
       total_processed: update.totalProcessed,
       total_saved: update.totalSaved,
+      total_invalid: update.totalInvalid,
+      invalid_samples: update.invalidSamples,
       summaries: update.summaries,
       error_message: update.errorMessage ?? null,
     })
@@ -173,6 +219,8 @@ Deno.serve(async (req) => {
   const summaries: SyncSummary[] = [];
   let totalProcessed = 0;
   let totalSaved = 0;
+  let totalInvalid = 0;
+  const invalidSamples: InvalidGameSample[] = [];
   const runId = await createSyncRun(supabase, {
     mode,
     dryRun: Boolean(body.dryRun),
@@ -186,7 +234,10 @@ Deno.serve(async (req) => {
       for (const month of months) {
         const games = await fetchRegularSeasonGames(seasonYear, month);
         totalProcessed += games.length;
-        const completedGames = games.filter((game) => isHistoryEligible(game.status));
+        const validation = filterValidGames(games);
+        totalInvalid += validation.invalidCount;
+        invalidSamples.push(...validation.invalidSamples.slice(0, 20 - invalidSamples.length));
+        const completedGames = validation.validGames.filter((game) => isHistoryEligible(game.status));
         const saved = body.dryRun ? 0 : completedGames.length;
         totalSaved += saved;
         summaries.push({
@@ -194,6 +245,7 @@ Deno.serve(async (req) => {
           month,
           processed: games.length,
           saved,
+          invalid: validation.invalidCount,
         });
 
         if (body.dryRun || completedGames.length === 0) {
@@ -228,6 +280,8 @@ Deno.serve(async (req) => {
               status: "failed",
               totalProcessed,
               totalSaved,
+              totalInvalid,
+              invalidSamples,
               summaries,
               errorMessage: error.message,
             });
@@ -235,6 +289,8 @@ Deno.serve(async (req) => {
               success: false,
               message: "경기 데이터 저장 중 오류가 발생했습니다.",
               error: error.message,
+              totalInvalid,
+              invalidSamples,
               summaries,
             });
           }
@@ -246,6 +302,8 @@ Deno.serve(async (req) => {
       status: "success",
       totalProcessed,
       totalSaved,
+      totalInvalid,
+      invalidSamples,
       summaries,
     });
 
@@ -255,6 +313,8 @@ Deno.serve(async (req) => {
       seasons,
       totalProcessed,
       totalSaved,
+      totalInvalid,
+      invalidSamples,
       summaries,
     });
   } catch (error) {
@@ -264,6 +324,8 @@ Deno.serve(async (req) => {
       status: "failed",
       totalProcessed,
       totalSaved,
+      totalInvalid,
+      invalidSamples,
       summaries,
       errorMessage: message,
     });
@@ -272,6 +334,8 @@ Deno.serve(async (req) => {
       success: false,
       message: "경기 데이터 동기화 중 오류가 발생했습니다.",
       error: message,
+      totalInvalid,
+      invalidSamples,
       summaries,
     });
   }

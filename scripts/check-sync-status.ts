@@ -58,7 +58,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 async function main() {
   const { data: runs, error: runsError } = await supabase
     .from('kbo_sync_runs')
-    .select('id, started_at, finished_at, mode, status, total_processed, total_saved, error_message, summaries')
+    .select('id, started_at, finished_at, mode, status, total_processed, total_saved, total_invalid, invalid_samples, error_message, summaries')
     .order('started_at', { ascending: false })
     .limit(5);
 
@@ -84,6 +84,7 @@ async function main() {
       finishedAt: formatKst(run.finished_at),
       processed: run.total_processed,
       saved: run.total_saved,
+      invalid: run.total_invalid,
       error: run.error_message ?? '',
     }))
   );
@@ -100,6 +101,15 @@ async function main() {
   }
 
   const latestRun = runs?.[0];
+  const latestInvalidSamples = Array.isArray(latestRun?.invalid_samples)
+    ? latestRun.invalid_samples
+    : [];
+
+  if (latestInvalidSamples.length > 0) {
+    console.warn('최근 동기화에서 제외된 이상 데이터 샘플');
+    console.table(latestInvalidSamples);
+  }
+
   if (latestRun?.status === 'failed') {
     process.exitCode = 1;
   }

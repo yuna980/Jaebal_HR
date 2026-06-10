@@ -156,6 +156,8 @@ create table if not exists public.kbo_sync_runs (
   seasons integer[] not null default '{}',
   total_processed integer not null default 0,
   total_saved integer not null default 0,
+  total_invalid integer not null default 0,
+  invalid_samples jsonb not null default '[]'::jsonb,
   summaries jsonb not null default '[]'::jsonb,
   error_message text
 );

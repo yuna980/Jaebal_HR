@@ -14,6 +14,19 @@ export interface KboGameRecord {
   losingPitcherName: string | null;
 }
 
+export type KboRecordValidationReason =
+  | "invalid_season_year"
+  | "invalid_game_date"
+  | "invalid_team_id"
+  | "same_team"
+  | "invalid_score"
+  | "finished_without_score"
+  | "cancelled_with_score";
+
+export type KboRecordValidationResult =
+  | { valid: true }
+  | { valid: false; reason: KboRecordValidationReason };
+
 interface KboTableCell {
   Text?: string;
   Class?: string;
@@ -53,6 +66,8 @@ const TEAM_NAME_TO_ID: Record<string, string> = {
   NC: "nc",
   KT: "kt",
 };
+
+const VALID_TEAM_IDS = new Set(Object.values(TEAM_NAME_TO_ID));
 
 function stripHtml(value: string | undefined) {
   return (value ?? "").replace(/<[^>]*>?/gm, " ").replace(/\s+/g, " ").trim();
@@ -114,6 +129,46 @@ function parseMatchString(matchStr: string) {
   }
 
   return null;
+}
+
+function isValidIsoDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime());
+}
+
+function hasValidScore(value: number | null) {
+  return value === null || (Number.isInteger(value) && value >= 0 && value <= 99);
+}
+
+export function validateKboGameRecord(game: KboGameRecord): KboRecordValidationResult {
+  if (!Number.isInteger(game.seasonYear) || game.seasonYear < 2000 || game.seasonYear > 2100) {
+    return { valid: false, reason: "invalid_season_year" };
+  }
+
+  if (!isValidIsoDate(game.gameDate)) {
+    return { valid: false, reason: "invalid_game_date" };
+  }
+
+  if (!VALID_TEAM_IDS.has(game.awayTeamId) || !VALID_TEAM_IDS.has(game.homeTeamId)) {
+    return { valid: false, reason: "invalid_team_id" };
+  }
+
+  if (game.awayTeamId === game.homeTeamId) {
+    return { valid: false, reason: "same_team" };
+  }
+
+  if (!hasValidScore(game.awayScore) || !hasValidScore(game.homeScore)) {
+    return { valid: false, reason: "invalid_score" };
+  }
+
+  if (game.status === "finished" && (game.awayScore === null || game.homeScore === null)) {
+    return { valid: false, reason: "finished_without_score" };
+  }
+
+  if (game.status === "cancelled" && (game.awayScore !== null || game.homeScore !== null)) {
+    return { valid: false, reason: "cancelled_with_score" };
+  }
+
+  return { valid: true };
 }
 
 async function postForm<T>(url: string, body: URLSearchParams | string) {
