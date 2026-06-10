@@ -126,6 +126,8 @@ interface KboGameListItem {
   SV_PIT_P_NM?: string;
   GAME_STATE_SC?: string;
   CANCEL_SC_ID?: string;
+  CANCEL_SC_NM?: string;
+  GAME_RESULT_CK?: number | string;
   T_SCORE_CN?: string;
   B_SCORE_CN?: string;
 }
@@ -288,6 +290,14 @@ async function fetchMonthlyGameDetails(year: number, month: number) {
   return detailMap;
 }
 
+function hasFinalResult(detail: KboGameListItem | undefined) {
+  return Number(detail?.GAME_RESULT_CK) === 1;
+}
+
+function isCancelledGame(note: string, detail: KboGameListItem | undefined) {
+  return note.includes('취소') || detail?.CANCEL_SC_NM?.includes('취소');
+}
+
 /**
  * match 문자열을 파싱하여 홈/어웨이 팀과 스코어를 분리합니다.
  * 예시:
@@ -408,6 +418,11 @@ export async function fetchKboSchedule(
       const { date, dayOfWeek } = parseDayString(currentDay);
 
       const detail = detailMap.get(buildDetailKey(date, parsed.awayTeam, parsed.homeTeam));
+      const status = isCancelledGame(note, detail)
+        ? 'cancelled'
+        : parsed.status === 'finished' && hasFinalResult(detail)
+          ? 'finished'
+          : 'scheduled';
 
       schedules.push({
         day: currentDay,
@@ -420,7 +435,7 @@ export async function fetchKboSchedule(
         awayScore: parsed.awayScore,
         homeScore: parsed.homeScore,
         stadium,
-        status: note.includes('취소') ? 'cancelled' : parsed.status,
+        status,
         note: note || null,
         winningPitcherName: detail?.W_PIT_P_NM?.trim() || null,
         losingPitcherName: detail?.L_PIT_P_NM?.trim() || null,

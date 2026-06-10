@@ -39,8 +39,12 @@ export type PitcherDisplay =
 export function buildResultSummary(game: KboMatch): { away: GameResultLabel; home: GameResultLabel } | null {
   if (game.status !== 'finished') return null;
 
-  const awayScore = game.awayScore ?? 0;
-  const homeScore = game.homeScore ?? 0;
+  if (typeof game.awayScore !== 'number' || typeof game.homeScore !== 'number') {
+    return null;
+  }
+
+  const awayScore = game.awayScore;
+  const homeScore = game.homeScore;
 
   return {
     away: awayScore > homeScore ? '승' : awayScore < homeScore ? '패' : '무',

@@ -25,6 +25,35 @@ function isPastDate(date: string) {
   return date < getKstToday();
 }
 
+type HistoryResult = {
+  home_score: number | null;
+  away_score: number | null;
+  status: 'scheduled' | 'finished' | 'cancelled';
+  note: string | null;
+  winning_pitcher_name: string | null;
+  losing_pitcher_name: string | null;
+};
+
+function hasCompleteScore(history: HistoryResult | null) {
+  return Boolean(
+    history &&
+      typeof history.away_score === 'number' &&
+      typeof history.home_score === 'number'
+  );
+}
+
+function isReliableFinishedHistory(gameDate: string, history: HistoryResult | null) {
+  if (!history || history.status !== 'finished' || !hasCompleteScore(history)) {
+    return false;
+  }
+
+  if (history.away_score === history.home_score || isPastDate(gameDate)) {
+    return true;
+  }
+
+  return Boolean(history.winning_pitcher_name && history.losing_pitcher_name);
+}
+
 export async function GET(request: Request) {
   const rateLimit = await checkRateLimit(request, 'game-schedules-today');
   if (!rateLimit.allowed) {
@@ -101,7 +130,13 @@ export async function GET(request: Request) {
   const homeTeam = TEAM_BY_ID[data.home_team_id] ?? data.home_team_id;
   const gameDate = String(data.game_date);
   const note = history?.note && history.note !== '-' ? history.note : data.note;
-  const status = note.includes('취소') ? 'cancelled' : history?.status ?? (isPastDate(gameDate) ? 'pending_result' : 'scheduled');
+  const status = note.includes('취소')
+    ? 'cancelled'
+    : isReliableFinishedHistory(gameDate, history)
+      ? 'finished'
+      : isPastDate(gameDate)
+        ? 'pending_result'
+        : 'scheduled';
 
   return NextResponse.json({
     success: true,

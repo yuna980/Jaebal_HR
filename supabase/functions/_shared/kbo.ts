@@ -31,6 +31,8 @@ interface KboGameListItem {
   G_DT?: string;
   AWAY_NM?: string;
   HOME_NM?: string;
+  GAME_RESULT_CK?: number;
+  CANCEL_SC_NM?: string;
   W_PIT_P_NM?: string;
   L_PIT_P_NM?: string;
 }
@@ -209,6 +211,8 @@ export async function fetchRegularSeasonGames(year: number, month: number): Prom
 
     const detail = detailMap.get(buildDetailKey(gameDate, parsed.awayTeamName, parsed.homeTeamName));
     const note = parseNote(cols[noteIndex]?.Text);
+    const isCancelled = note.includes("취소") || detail?.CANCEL_SC_NM?.includes("취소");
+    const isFinished = parsed.status === "finished" && detail?.GAME_RESULT_CK === 1;
 
     games.push({
       seasonYear: year,
@@ -218,7 +222,7 @@ export async function fetchRegularSeasonGames(year: number, month: number): Prom
       stadium: stripHtml(cols[stadiumIndex]?.Text),
       awayScore: parsed.awayScore,
       homeScore: parsed.homeScore,
-      status: note.includes("취소") ? "cancelled" : parsed.status,
+      status: isCancelled ? "cancelled" : isFinished ? "finished" : "scheduled",
       note,
       winningPitcherName: detail?.W_PIT_P_NM?.trim() || null,
       losingPitcherName: detail?.L_PIT_P_NM?.trim() || null,

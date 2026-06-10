@@ -68,6 +68,26 @@ function getKstToday() {
   }).format(new Date());
 }
 
+function hasCompleteScore(history: HistoryRow | undefined) {
+  return Boolean(
+    history &&
+      typeof history.away_score === 'number' &&
+      typeof history.home_score === 'number'
+  );
+}
+
+function isReliableFinishedHistory(gameDate: string, history: HistoryRow | undefined, today: string) {
+  if (!history || history.status !== 'finished' || !hasCompleteScore(history)) {
+    return false;
+  }
+
+  if (history.away_score === history.home_score || gameDate < today) {
+    return true;
+  }
+
+  return Boolean(history.winning_pitcher_name && history.losing_pitcher_name);
+}
+
 function getGameKey(row: Pick<ScheduleRow, 'game_date' | 'home_team_id' | 'away_team_id'>) {
   return `${row.game_date}-${row.away_team_id}-${row.home_team_id}`;
 }
@@ -144,7 +164,13 @@ export async function GET(request: Request) {
     const date = toDateText(schedule.game_date);
     const note = history?.note && history.note !== '-' ? history.note : schedule.note;
     const isMissingResult = schedule.game_date < today && !history && !note?.includes('취소');
-    const status = note?.includes('취소') ? 'cancelled' : history?.status ?? (isMissingResult ? 'pending_result' : 'scheduled');
+    const status = note?.includes('취소')
+      ? 'cancelled'
+      : isReliableFinishedHistory(schedule.game_date, history, today)
+        ? 'finished'
+        : isMissingResult
+          ? 'pending_result'
+          : 'scheduled';
 
     return {
       day: `${date}(${toDayOfWeek(schedule.game_date)})`,
