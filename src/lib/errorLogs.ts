@@ -2,6 +2,15 @@ import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 
 const MAX_ERROR_MESSAGE_LENGTH = 2000;
 const MAX_STACK_LENGTH = 8000;
+const REDACTED_VALUE = '[REDACTED]';
+const SENSITIVE_KEY_PATTERN =
+  /(authorization|cookie|password|passwd|secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|apikey|session|jwt)/i;
+const SENSITIVE_VALUE_PATTERNS = [
+  /Bearer\s+[A-Za-z0-9._~+/=-]+/gi,
+  /(access[_-]?token|refresh[_-]?token|api[_-]?key|apikey|session[_-]?secret|password|secret)=([^&\s;]+)/gi,
+  /(sb-[^=\s;]*token)=([^&\s;]+)/gi,
+  /\b(token|secret|password)\s+([A-Za-z0-9._~+/=-]+)/gi,
+];
 
 export interface SerializedErrorLogValue {
   name: string;
@@ -19,19 +28,54 @@ export interface ServerErrorLogInput {
   metadata?: Record<string, unknown>;
 }
 
+function redactSensitiveText(value: string) {
+  return SENSITIVE_VALUE_PATTERNS.reduce(
+    (nextValue, pattern) =>
+      nextValue.replace(pattern, (match, key) => {
+        if (typeof key === 'string' && match.includes('=')) {
+          return `${key}=${REDACTED_VALUE}`;
+        }
+
+        if (typeof key === 'string' && match.includes(' ')) {
+          return `${key} ${REDACTED_VALUE}`;
+        }
+
+        return REDACTED_VALUE;
+      }),
+    value
+  );
+}
+
+export function redactSensitiveLogValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitiveLogValue(item));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return typeof value === 'string' ? redactSensitiveText(value) : value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      SENSITIVE_KEY_PATTERN.test(key) ? REDACTED_VALUE : redactSensitiveLogValue(item),
+    ])
+  );
+}
+
 export function serializeErrorForLog(error: unknown): SerializedErrorLogValue {
   if (error instanceof Error) {
     return {
       name: error.name || 'Error',
-      message: error.message.slice(0, MAX_ERROR_MESSAGE_LENGTH),
-      stack: error.stack ? error.stack.slice(0, MAX_STACK_LENGTH) : null,
+      message: redactSensitiveText(error.message).slice(0, MAX_ERROR_MESSAGE_LENGTH),
+      stack: error.stack ? redactSensitiveText(error.stack).slice(0, MAX_STACK_LENGTH) : null,
     };
   }
 
   if (typeof error === 'string') {
     return {
       name: 'Error',
-      message: error.slice(0, MAX_ERROR_MESSAGE_LENGTH),
+      message: redactSensitiveText(error).slice(0, MAX_ERROR_MESSAGE_LENGTH),
       stack: null,
     };
   }
@@ -53,7 +97,7 @@ export function getRequestErrorContext(request?: Request) {
   }
 
   const url = new URL(request.url);
-  const query = Object.fromEntries(url.searchParams.entries());
+  const query = redactSensitiveLogValue(Object.fromEntries(url.searchParams.entries()));
 
   return {
     method: request.method,
@@ -77,7 +121,7 @@ export function buildServerErrorLog(input: ServerErrorLogInput) {
     user_id: input.userId ?? null,
     request_path: requestContext.requestPath,
     query: requestContext.query,
-    metadata: input.metadata ?? {},
+    metadata: redactSensitiveLogValue(input.metadata ?? {}),
   };
 }
 
