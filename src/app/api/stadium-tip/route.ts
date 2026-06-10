@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { checkRateLimit } from '@/lib/apiSecurity';
 import { logServerError } from '@/lib/errorLogs';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -44,6 +45,14 @@ function summarizeTransport(value: string) {
 }
 
 export async function GET(request: Request) {
+  const rateLimit = await checkRateLimit(request, 'stadium-tip');
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { success: false, message: '요청이 너무 많아요. 잠시 후 다시 시도해주세요.' },
+      { status: 429 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const stadiumName = normalizeStadiumName(searchParams.get('stadium') ?? '');
 

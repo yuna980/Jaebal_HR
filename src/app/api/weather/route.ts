@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { STADIUM_WEATHER_LOCATIONS } from '@/data/stadiumWeather';
+import { checkRateLimit } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,14 @@ function getAirQualityLabel(pm10: number | null) {
 }
 
 export async function GET(request: Request) {
+  const rateLimit = await checkRateLimit(request, 'weather');
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { success: false, message: '요청이 너무 많아요. 잠시 후 다시 시도해주세요.' },
+      { status: 429 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const stadium = searchParams.get('stadium');
 

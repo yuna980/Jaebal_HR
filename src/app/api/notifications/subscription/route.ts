@@ -1,6 +1,5 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { requireAuthenticatedApiUser } from '@/lib/apiAuth';
 import { logServerError } from '@/lib/errorLogs';
 
 export const dynamic = 'force-dynamic';
@@ -11,37 +10,6 @@ interface PushSubscriptionInput {
     p256dh?: unknown;
     auth?: unknown;
   };
-}
-
-async function getAuthenticatedSupabaseClient() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        },
-      },
-    }
-  );
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    return { supabase, user: null };
-  }
-
-  return { supabase, user };
 }
 
 function isValidSubscription(subscription: PushSubscriptionInput) {
@@ -58,7 +26,7 @@ function isValidSubscription(subscription: PushSubscriptionInput) {
 
 export async function GET() {
   const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY ?? '';
-  const { supabase, user } = await getAuthenticatedSupabaseClient();
+  const { supabase, user } = await requireAuthenticatedApiUser();
 
   if (!user) {
     return NextResponse.json({ success: false, message: '로그인이 필요합니다.' }, { status: 401 });
@@ -90,7 +58,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { supabase, user } = await getAuthenticatedSupabaseClient();
+  const { supabase, user } = await requireAuthenticatedApiUser();
 
   if (!user) {
     return NextResponse.json({ success: false, message: '로그인이 필요합니다.' }, { status: 401 });
@@ -158,7 +126,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { supabase, user } = await getAuthenticatedSupabaseClient();
+  const { supabase, user } = await requireAuthenticatedApiUser();
 
   if (!user) {
     return NextResponse.json({ success: false, message: '로그인이 필요합니다.' }, { status: 401 });
