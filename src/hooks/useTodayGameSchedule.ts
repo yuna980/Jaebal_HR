@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { KboMatch } from '@/lib/kboScraper';
+import { getTodayScheduleCacheTtlMs } from '@/lib/todayScheduleCache';
 
 interface UseTodayGameScheduleResult {
   schedule: KboMatch | null;
@@ -15,7 +16,6 @@ type TodayScheduleCacheEntry = {
 };
 
 const TODAY_SCHEDULE_CACHE_KEY = 'game-schedule-today-cache-v2';
-const TODAY_SCHEDULE_CACHE_TTL_MS = 5 * 60 * 1000;
 const memoryCache = new Map<string, TodayScheduleCacheEntry>();
 const inflightRequests = new Map<string, Promise<KboMatch | null>>();
 
@@ -47,7 +47,7 @@ function readCachedSchedule(teamId: string, date?: string) {
   const memoryEntry = memoryCache.get(cacheKey);
   const storedEntry = memoryEntry ?? readStoredCache()[cacheKey];
 
-  if (!storedEntry || Date.now() - storedEntry.savedAt > TODAY_SCHEDULE_CACHE_TTL_MS) {
+  if (!storedEntry || Date.now() - storedEntry.savedAt > getTodayScheduleCacheTtlMs(storedEntry.schedule)) {
     return null;
   }
 
@@ -60,7 +60,7 @@ function hasCachedSchedule(teamId: string, date?: string) {
   const memoryEntry = memoryCache.get(cacheKey);
   const storedEntry = memoryEntry ?? readStoredCache()[cacheKey];
 
-  return Boolean(storedEntry && Date.now() - storedEntry.savedAt <= TODAY_SCHEDULE_CACHE_TTL_MS);
+  return Boolean(storedEntry && Date.now() - storedEntry.savedAt <= getTodayScheduleCacheTtlMs(storedEntry.schedule));
 }
 
 function writeCachedSchedule(teamId: string, date: string | undefined, schedule: KboMatch | null) {
