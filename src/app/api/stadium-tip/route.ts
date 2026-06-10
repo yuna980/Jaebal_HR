@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logServerError } from '@/lib/errorLogs';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
 const CACHE_CONTROL = 'public, s-maxage=21600, stale-while-revalidate=86400';
@@ -73,7 +74,15 @@ export async function GET(request: Request) {
     ]);
 
   if (stadiumError || foodError) {
-    console.error('직관 꿀팁 조회 실패:', stadiumError ?? foodError);
+    const error = stadiumError ?? foodError;
+    console.error('직관 꿀팁 조회 실패:', error);
+    await logServerError({
+      route: '/api/stadium-tip',
+      request,
+      statusCode: 500,
+      error,
+      metadata: { stadiumName },
+    });
     return NextResponse.json({ success: false, message: '직관 꿀팁을 가져오지 못했어요.' }, { status: 500 });
   }
 

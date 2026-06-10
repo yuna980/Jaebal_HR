@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { KBO_TEAMS } from '@/data/teams';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { checkRateLimit, isValidIsoDate, isValidTeamId } from '@/lib/apiSecurity';
+import { logServerError } from '@/lib/errorLogs';
 import { normalizeScheduleStatus } from '@/lib/gameStatus';
 
 export const dynamic = 'force-dynamic';
@@ -67,6 +68,13 @@ export async function GET(request: Request) {
 
   if (error) {
     console.error('오늘 경기 일정 조회 실패:', error);
+    await logServerError({
+      route: '/api/game-schedules/today',
+      request,
+      statusCode: 500,
+      error,
+      metadata: { step: 'schedule_query', teamId, date },
+    });
     return NextResponse.json(
       { success: false, schedule: null, message: '오늘 경기 일정을 가져오지 못했습니다.' },
       { status: 500 }
@@ -88,6 +96,13 @@ export async function GET(request: Request) {
 
   if (historyError) {
     console.error('오늘 경기 결과 조회 실패:', historyError);
+    await logServerError({
+      route: '/api/game-schedules/today',
+      request,
+      statusCode: 500,
+      error: historyError,
+      metadata: { step: 'history_query', teamId, date },
+    });
     return NextResponse.json(
       { success: false, schedule: null, message: '오늘 경기 결과를 가져오지 못했습니다.' },
       { status: 500 }

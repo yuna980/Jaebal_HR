@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logServerError } from '@/lib/errorLogs';
 import { sendScheduledNotifications } from '@/lib/notifications/scheduler';
 import { isCronAuthorized } from '@/lib/notifications/cronAuth';
 
@@ -22,6 +23,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, summary });
   } catch (error) {
     const message = error instanceof Error ? error.message : '알림 발송 실패';
+    await logServerError({
+      route: '/api/notifications/send',
+      request,
+      statusCode: 500,
+      error,
+      metadata: { type },
+    });
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

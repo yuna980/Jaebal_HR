@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { logServerError } from '@/lib/errorLogs';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +116,14 @@ export async function POST(request: Request) {
   );
 
   if (preferenceError) {
+    await logServerError({
+      route: '/api/notifications/subscription',
+      request,
+      statusCode: 500,
+      error: preferenceError,
+      userId: user.id,
+      metadata: { step: 'preference_upsert' },
+    });
     return NextResponse.json({ success: false, message: preferenceError.message }, { status: 500 });
   }
 
@@ -134,6 +143,14 @@ export async function POST(request: Request) {
   );
 
   if (error) {
+    await logServerError({
+      route: '/api/notifications/subscription',
+      request,
+      statusCode: 500,
+      error,
+      userId: user.id,
+      metadata: { step: 'subscription_upsert' },
+    });
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 
@@ -161,6 +178,14 @@ export async function DELETE(request: Request) {
     .eq('endpoint', body.endpoint);
 
   if (error) {
+    await logServerError({
+      route: '/api/notifications/subscription',
+      request,
+      statusCode: 500,
+      error,
+      userId: user.id,
+      metadata: { step: 'subscription_deactivate' },
+    });
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 

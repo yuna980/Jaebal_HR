@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchKboSchedule } from '@/lib/kboScraper';
 import { checkRateLimit } from '@/lib/apiSecurity';
+import { logServerError } from '@/lib/errorLogs';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +48,13 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('KBO 일정 API 에러:', error);
+    await logServerError({
+      route: '/api/schedule',
+      request,
+      statusCode: 500,
+      error,
+      metadata: { rawYear, rawMonth, regularSeasonOnly },
+    });
     return NextResponse.json(
       { success: false, schedules: [], message: '데이터를 가져오는 중 오류가 발생했습니다.' },
       { status: 500 }

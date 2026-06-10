@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { KBO_TEAMS } from '@/data/teams';
 import { checkRateLimit, isValidSeasonYear, isValidTeamId } from '@/lib/apiSecurity';
+import { logServerError } from '@/lib/errorLogs';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { buildStandings, formatWinRate, getRank, type GameHistoryForStats } from '@/lib/teamStats';
 
@@ -57,7 +58,15 @@ export async function GET(request: Request) {
     ]);
 
   if (currentError || previousError) {
-    console.error('팀 성적 조회 실패:', currentError ?? previousError);
+    const error = currentError ?? previousError;
+    console.error('팀 성적 조회 실패:', error);
+    await logServerError({
+      route: '/api/team-stats',
+      request,
+      statusCode: 500,
+      error,
+      metadata: { teamId, seasonYear, previousSeasonYear },
+    });
     return NextResponse.json(
       { success: false, message: '팀 성적을 가져오지 못했습니다.' },
       { status: 500 }

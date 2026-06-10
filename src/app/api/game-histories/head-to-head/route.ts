@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { KBO_TEAMS } from '@/data/teams';
 import { checkRateLimit, isValidSeasonYear, isValidTeamId } from '@/lib/apiSecurity';
+import { logServerError } from '@/lib/errorLogs';
 import { buildHeadToHeadRecord, fetchHeadToHeadRecordFromKbo } from '@/lib/gameRecords';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -76,6 +77,13 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('상대 전적 조회 API 에러:', error);
+    await logServerError({
+      route: '/api/game-histories/head-to-head',
+      request,
+      statusCode: 500,
+      error,
+      metadata: { teamId, opponentTeamId, seasonYear: seasonYearParam },
+    });
     return NextResponse.json(
       { success: false, record: null, message: '상대 전적을 가져오는 중 오류가 발생했습니다.' },
       { status: 500 }

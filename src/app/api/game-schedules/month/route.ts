@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { KBO_TEAMS } from '@/data/teams';
 import { checkRateLimit } from '@/lib/apiSecurity';
+import { logServerError } from '@/lib/errorLogs';
 import { normalizeScheduleStatus } from '@/lib/gameStatus';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -131,7 +132,15 @@ export async function GET(request: Request) {
     ]);
 
   if (scheduleError || historyError) {
-    console.error('월간 대진표 DB 조회 실패:', scheduleError ?? historyError);
+    const error = scheduleError ?? historyError;
+    console.error('월간 대진표 DB 조회 실패:', error);
+    await logServerError({
+      route: '/api/game-schedules/month',
+      request,
+      statusCode: 500,
+      error,
+      metadata: { year, month },
+    });
     return NextResponse.json(
       { success: false, schedules: [], message: '월간 대진표를 가져오지 못했습니다.' },
       { status: 500 }
