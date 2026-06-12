@@ -6,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Home, MapPin, User, Calendar } from 'lucide-react';
 import { useTeam } from '@/context/TeamContext';
 import { prefetchGameScheduleMonth } from '@/hooks/useGameScheduleMonth';
-import { getTodayDateString } from '@/hooks/useKboSchedule';
 import { prefetchTodayGameSchedule } from '@/hooks/useTodayGameSchedule';
 
 const NAV_ITEMS = [
@@ -30,7 +29,7 @@ export default function BottomNav() {
   const prefetchDashboardData = useCallback(() => {
     const today = new Date();
     prefetchGameScheduleMonth(today.getFullYear(), today.getMonth() + 1);
-    prefetchTodayGameSchedule(myTeam?.id, getTodayDateString());
+    prefetchTodayGameSchedule(myTeam?.id);
   }, [myTeam?.id]);
 
   useEffect(() => {

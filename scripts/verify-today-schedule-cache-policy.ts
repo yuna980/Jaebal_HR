@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { getTodayScheduleCacheTtlMs } from '../src/lib/todayScheduleCache';
 import type { KboMatch } from '../src/lib/kboScraper';
 
@@ -35,6 +36,13 @@ assert.equal(getTodayScheduleCacheTtlMs(baseGame, atKst(0, 30, 11)), 5 * MINUTE)
 assert.equal(
   getTodayScheduleCacheTtlMs({ ...baseGame, status: 'finished', awayScore: 2, homeScore: 8 }, atKst(21, 30)),
   1 * MINUTE
+);
+
+const bottomNavSource = readFileSync('src/components/BottomNav.tsx', 'utf8');
+assert.equal(
+  bottomNavSource.includes('prefetchTodayGameSchedule(myTeam?.id, getTodayDateString())'),
+  false,
+  'BottomNav must not prefetch today schedule with MM.DD date text'
 );
 
 console.log('today schedule cache policy verified');
