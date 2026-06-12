@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { TeamProvider } from "@/context/TeamContext";
 import BottomNav from "@/components/BottomNav";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "야구없인못살아",
@@ -33,6 +34,7 @@ export default function RootLayout({
           {children}
           <BottomNav />
         </TeamProvider>
+        <Analytics />
       </body>
     </html>
   );
